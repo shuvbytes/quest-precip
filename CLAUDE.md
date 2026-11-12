@@ -161,8 +161,13 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (end of 12 Nov session; user on a break, M4 NOT started)
-**M0–M3 done; 18 tests passing.** All open questions from the M2/M3 reviews are resolved:
+## Status (end of 12 Nov, ~late night; user stopped for the night, M5 NOT started)
+**M0–M4 done, including the disagreement layer; 36 tests passing.** Backed up to GitHub:
+**https://github.com/shuvbytes/quest-precip** (private, branch `main`, tracking `origin/main`).
+Pages is not enabled yet (M7). Before making the repo public, re-check the tracked files (32 files, 527 kB on
+12 Nov; only image = validation figure).
+
+Earlier review questions, all resolved:
 - ECMWF chart comparison: no bugs; 0.25° values are point samples (`docs/validation/`).
 - ENS window alignment verified (same run/window in GRIB keys; best correlation at 0–24 h).
 - NE India mismatch resolved: it came from comparing ≥ 1 mm colouring with P(≥ 10 mm). Like-for-like agreement
@@ -184,6 +189,15 @@ Commits so far:
 | `ca4803e` | M3 ENS probabilities (+ run-selection fix, latitude-flip fix) |
 | `509f9e1` | M3 window-alignment check, probability legend fix |
 | `603b812` | Measured palette; NE like-for-like checks |
+| `fe777ff`, `04ea885` | End-of-day status; schedule change (IMD-day → 14 Nov night, 15 Nov buffer only) |
+| `b8d1090` | M4 step 1: Mercator frame PNGs |
+| `5c5952c` | M4 step 2: alignment check |
+| `07326f4` | M4 step 3: manifest.json |
+| `c26b1bf` | M4 step 4: points.bin + round-trip test |
+| `04e1392`, `b571f0c` | Disagreement rule + map layer |
+| `e764ff8` | Whole centred "drier" dots; check figure |
+| `8c98bd6`, `ac7a884` | Disagreement review numbers; zoom-6 decision |
+| `1b85ed0` | Map min cluster 3; point panel keeps all flags; zoom note (pushed to GitHub) |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -234,9 +248,13 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   at 10 mm); and the neighbourhood removes similar shares on both sides (96 % vs 94 % kept at 10 mm). Cause:
   ENS reaches ≥ 75 % only in broad organised rain, where HRES is almost always wet too, while HRES's sharp local
   maxima often fall where the ensemble spreads its probability below 25 %.
-- Minimum cluster size (8-connected) — **proposed, awaiting approval, not applied:** wetter cells 2,489 → 1,861
-  (min 2) → 1,551 (min 3); clusters 967 → 339 → 184 (sum of the table's cluster counts); drier 50 → 44 → 32. The
-  Bay point sits in a 26-cell cluster (it survives). **Still awaiting the user's choice (1 / 2 / 3).**
+- Minimum cluster size (8-connected): wetter cells 2,489 → 1,861 (min 2) → 1,551 (min 3); clusters
+  967 → 339 → 184; drier 50 → 44 → 32. The Bay point sits in a 26-cell cluster (it survives).
+  **Decided (user, 12 Nov): map hatches only clusters of ≥ 3 cells (`disagree.MAP_MIN_CLUSTER`); the point panel
+  keeps every flagged cell**, so clicking an isolated flagged cell still shows the disagreement sentence. Built in
+  `1b85ed0`: 62 hatch PNGs; manifest `n_*_on_map` vs `n_*` + full `cells_*` lists (manifest 123.6 kB).
+- **Decided (user, 12 Nov): small screens.** Fit the region on load; if that needs a zoom below 6, show
+  "Zoom in to see disagreement marks" while zoom < 6 (manifest `min_zoom_for_marks`, `zoom_note`).
 - User review (12 Nov, late): wetter hatching sits only on the 10–25 % shade, never on the ≥ 25 % core, which is
   consistent with the rule. **Decided: the web map starts at zoom 6** (dots faint at zoom 5). Optional polish: some
   dots look slightly clipped at zoom 7 (likely non-integer scaling), so check in M5.
@@ -245,7 +263,19 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   `.gitignore` covers `site_build/`, `data/raw/`, `outputs/`.
 
 ## Next steps
-**M5 (13 Nov):** Leaflet front end, run locally with `python -m http.server` from `site_build/`.
+**M5 — 13 Nov morning, wait for the user's go-ahead.** Leaflet front end (static, no build step), run locally
+with `python -m http.server` from `site_build/` after `python pipeline/build.py ...`. Requirements gathered so far
+(all values from manifest.json, nothing hard-coded):
+- Initial view: fit the region; at desktop size this should be about zoom 6. Below zoom 6, show the zoom note for marks.
+- Basemap: no political borders + India official boundary GeoJSON (source cited); it must pass the palette
+  background check (palest step ≥ dE 8 vs the basemap, as in `tests/test_palette.py`).
+- Layers: HRES 3 h mode; 24 h mode = HRES total + ENS P(≥X) (X selector) + disagreement hatch (on by default,
+  toggle). L.imageOverlay with manifest bounds; CSS `image-rendering: pixelated` (check the zoom-7 dot clipping).
+- Time slider with exact IST labels from the manifest; run time in UTC + IST; "last updated".
+- Legends from manifest bins/colours; "amounts below 0.5 mm (3 h) / 1 mm (24 h) not shown".
+- Attribution: manifest `attribution` (ECMWF, CC BY 4.0, modification notice).
+- (M6) point panel: lazy-load points.bin; agreed wording + "nearby: X–Y mm"; disagreement sentence from
+  `cells_*` + `point_text`.
 **(Done) M4 original spec, kept for reference:** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
 probabilities) using `palette.py` and the fixed legends, with per-frame floor flags; manifest.json (run time UTC,
 IST labels, windows, units, bins, floor_i, source, licence); point grid (uint16 0.1 mm + uint8 %); coastline
@@ -254,8 +284,8 @@ alignment check; report the real compressed transfer size.
 ## Remaining schedule (agreed 12 Nov)
 | Day (IST) | Work |
 |---|---|
-| 12 Nov evening (after break) | M4 |
-| 13 Nov | M5 Leaflet front end (locally), M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
+| 12 Nov evening (after break) | M4 — **done**, plus disagreement layer and GitHub backup |
+| 13 Nov (from morning) | M5 Leaflet front end (locally), M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
 | 14 Nov | M7b FastAPI /point (HF Spaces, Render fallback); automation (GitHub Actions cron 2×/day, 00z/12z run selection); M8 polish ("last updated", README). Target: app finished by the night of 14 Nov |
 | 14 Nov night | IMD-day (08:30–08:30 IST) HRES view, only if M8 is done |
 | 15 Nov | Buffer only: fixes, no new features. Hard stop at start + 72 h |
