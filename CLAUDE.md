@@ -52,7 +52,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
 - [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
 - [ ] M8 honesty/UX polish, "last updated", README
-- [ ] Buffer (15 Nov AM): fixes, IMD-day stretch goal
+- [ ] IMD-day (08:30–08:30 IST) view: 14 Nov night, only if M8 is done
+- [ ] Buffer (15 Nov): fixes only, no new features
 
 ## Data facts read from the GRIB (M1, run 2026-11-12 00z)
 - `tp`: units `m`, `GRIB_stepType = accum` (accumulated since run start), GRIB edition 2, regular_ll 0.25°.
@@ -200,4 +201,5 @@ alignment check; report the real compressed transfer size.
 | 12 Nov evening (after break) | M4 |
 | 13 Nov | M5 Leaflet front end (locally), M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
 | 14 Nov | M7b FastAPI /point (HF Spaces, Render fallback); automation (GitHub Actions cron 2×/day, 00z/12z run selection); M8 polish ("last updated", README). Target: app finished by the night of 14 Nov |
-| 15 Nov | Buffer: fixes, IMD-day (08:30–08:30 IST) stretch goal. Hard stop at start + 72 h |
+| 14 Nov night | IMD-day (08:30–08:30 IST) HRES view, only if M8 is done |
+| 15 Nov | Buffer only: fixes, no new features. Hard stop at start + 72 h |
