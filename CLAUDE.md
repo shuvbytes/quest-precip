@@ -20,8 +20,20 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - Hosting: GitHub Pages (static, always on). Point forecasts are looked up **in the browser** from a
   precomputed grid file, so no server is needed. FastAPI on HF/Render is optional, only if time allows.
   Why: free HF Spaces sleep after 48 h, and the 2026 status of the free tier is unclear.
+  (Updated later: FastAPI became a real milestone M7b; see below.)
 - Pipeline: GitHub Actions cron twice a day → PNGs (reprojected to Web Mercator / EPSG:3857 so they line
-  up in Leaflet) + manifest.json + point grid → `gh-pages` branch.
+  up in Leaflet) + manifest.json + point grid → published with `actions/upload-pages-artifact` +
+  `actions/deploy-pages`. **No images or generated data in git, no gh-pages branch.** A failed run leaves the
+  last good deploy live; the page shows "last updated" and the run time so staleness is visible.
+- Point data (decided after M1): HRES 3-hourly as uint16 in 0.1 mm units; ENS probabilities as uint8 %;
+  file lazy-loaded on first click. Size for the 133×141 grid: 18,753 × 48 × 2 B = 1.80 MB plus
+  18,753 × 7 thresholds × 11 windows × 1 B = 1.44 MB ≈ 3.24 MB raw. The real compressed transfer size is reported in M4.
+  (An earlier "1.5 MB" estimate was wrong: smaller box, no ENS.)
+- 24 h mode: both layers use the ENS windows (00z run: 00–00 UTC = 05:30–05:30 IST; 12z: 17:30–17:30 IST).
+  HRES 24 h total = TP(t+24) − TP(t). Labels state exact IST bounds, e.g. "Thu 13 Nov 05:30 IST → Fri 14 Nov
+  05:30 IST", never a bare weekday. IMD rain day (08:30–08:30 IST) HRES view = stretch goal, labelled as a different window.
+- FastAPI `/point` = milestone M7b (14 Nov afternoon). Try HF Spaces first (user's HF login was failing),
+  Render as fallback. The browser lookup stays as the fallback if the API is asleep or down.
 - Basemap: no political borders + India official boundary GeoJSON overlay (source cited).
 - Times: UTC everywhere internally; IST only at display. Units: read from GRIB attrs, convert m → mm explicitly.
 - Tooling: `gh` CLI installed and logged in (user confirmed) → used for repo creation / Pages in M7.
@@ -30,14 +42,17 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 ## Milestones
 - [x] M0 repo, env, this file (Python 3.11.18, eccodes 2.50.0, cfgrib 0.9.15.1, xarray 2026.9.0, ecmwf-opendata 0.3.35)
 - [x] M1 download one HRES run; print units/stepType/base time/grid
-- [ ] M2 de-accumulate to 3 h / 24 h mm; tests; one map
+- [ ] M2 de-accumulate to 3 h / 24 h mm; tests; one map. Also: prove the negative diffs come from GRIB packing
+      (packing keys), set the lowest map bin above the quantisation noise, 24 h = TP(t+24) − TP(t) tested against
+      summed 3 h amounts, locate the 505 mm max and compare with ECMWF's chart for this run.
 - [ ] M3 ENS tpg* probabilities; P(≥10 mm) map
-- [ ] M4 3857 PNGs + manifest + point grid; alignment check
+- [ ] M4 3857 PNGs + manifest + point grid; alignment check; real compressed transfer size
 - [ ] M5 Leaflet front end locally
-- [ ] M6 client-side point forecast panel
-- [ ] M7 GitHub Actions + Pages deploy (public URL)
-- [ ] M8 honesty/UX polish, README
-- [ ] Buffer (15 Nov AM): fixes, optional FastAPI
+- [ ] M6 client-side point forecast panel (lazy-loaded)
+- [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
+- [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
+- [ ] M8 honesty/UX polish, "last updated", README
+- [ ] Buffer (15 Nov AM): fixes, IMD-day stretch goal
 
 ## Data facts read from the GRIB (M1, run 2026-11-12 00z)
 - `tp`: units `m`, `GRIB_stepType = accum` (accumulated since run start), GRIB edition 2, regular_ll 0.25°.
