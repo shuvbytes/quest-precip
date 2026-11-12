@@ -85,6 +85,22 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   300–1000 mm streak at ~85–87°E, 9–15°N, the same small separate speck to the south, and the same 100–300 mm area
   in the southern Bay. OpenCharts API: `https://charts.ecmwf.int/opencharts-api/v1/products/medium-rain-acc/?base_time=...&valid_time=...&projection=opencharts_southern_asia`.
 
+## M2 follow-up: differences vs ECMWF chart (`pipeline/diagnose_vs_chart.py`, uses 0.1° step-144 file)
+- Central India "beige" on the chart is the chart's **land background** RGB (255,226,171), not the 0.1–1 mm
+  shade (239,219,183). Our 0–144 h totals there are exactly 0 at 22N 78E and 18N 76E in both 0.25° and 0.1°
+  open data. The 16–24N, 74–82E box has 1054 of 1080 cells = 0. No disagreement.
+  Note: at step 144 both open-data fields have quantum 0.244 mm, so true totals < 0.122 mm are stored as 0.
+- South Tamil Nadu coast: 0.25° totals 3.4–13.9 mm; 0.1° cells inside the same 0.25° boxes range 1.9–52.5 mm.
+  Rain varies on scales below 25 km, and our cells jump across the 5 and 10 mm bin edges, so the map looks
+  patchy where the chart's smoothed contours look like a band. Not a bug.
+- Himalaya: 7 of 1325 cells (26–32N, 80–93E) ≥ 50 mm; the highest is 165 mm at 28.50N 84.75E, where the 8 neighbours' median is 4 mm.
+  The 0.1° field has 197 mm at the same point and a 91 mm mean over the box. These are real orographic peaks
+  in the model; the chart's contouring does not resolve single-cell peaks. Not a bug (the 0–144 total is
+  TP(144) alone, no differencing).
+- **Key fact: a 0.25° open-data value is a point sample, not a box average.** At the 4,757 points shared with
+  the 0.1° grid, |0.25 − 0.1| has median 0.000 mm (99th pct 0.73). |0.25 − mean of 0.1 cells in its box|
+  has median 0.244 mm, 99th pct 10.7 mm, max 97 mm. So UI text must NOT say "average over a 25 km box".
+
 ## Status
 M0, M1, M2 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
 Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
