@@ -1,0 +1,17 @@
+# Raw downloads are large and re-fetchable; never commit them
+data/raw/
+*.grib2
+*.grib
+*.idx
+
+# Generated site output (published to gh-pages by CI, not to main)
+site_build/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+.ipynb_checkpoints/
+
+# Local Claude Code settings (per machine)
+.claude/settings.local.json

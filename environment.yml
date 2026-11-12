@@ -1,0 +1,14 @@
+name: quest-precip
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - eccodes          # C library that decodes GRIB files
+  - cfgrib           # lets xarray open GRIB via eccodes
+  - xarray
+  - numpy
+  - matplotlib
+  - pytest
+  - pip
+  - pip:
+      - ecmwf-opendata   # official ECMWF Open Data download client
