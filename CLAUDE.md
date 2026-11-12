@@ -222,6 +222,22 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   (15.0N 86.5E) is flagged wetter at 100 mm, 108–132 h (test).
 - Visual note: the drier dots are small at full-region zoom; check readability in M5 when Leaflet scales the image.
 
+### Disagreement review (12 Nov, late) — `m4_disagree_figure.py`, `m4_disagree_stats.py` (dev)
+- Drier marks looked like glitches: the dot pattern (6 px period) was larger than a cell (4 px). Fixed: hatch
+  frames are drawn at 12 px/cell (same bounds) with one centred dot per drier cell (`e764ff8`). Readable at web
+  zooms 6 (11.4 px/cell) and 7 (22.8); at zoom 5 (5.7 px/cell) the dots shrink to faint rings → M5: start the
+  map at zoom 6, or handle zoom 5 separately.
+- Straight vertical edge in the old crop = the region's west edge (grid starts at 65.00E, image edge 64.875E).
+  The ENS field continues outside (P(≥1) at 64.75E is similar to 65.00E). Not a bug.
+- Wetter ≫ drier (2,489 vs 50) is a property of the data, not the rule: HRES's wet area matches the ENS expected
+  wet area (ratio 1.02 at 1 mm, 1.07 at 10 mm, 0.88 at 50 mm); even the point-only rule is lopsided (1,245 vs 121
+  at 10 mm); and the neighbourhood removes similar shares on both sides (96 % vs 94 % kept at 10 mm). Cause:
+  ENS reaches ≥ 75 % only in broad organised rain, where HRES is almost always wet too, while HRES's sharp local
+  maxima often fall where the ensemble spreads its probability below 25 %.
+- Minimum cluster size (8-connected) — **proposed, awaiting approval, not applied:** wetter cells 2,489 → 1,861
+  (min 2) → 1,551 (min 3); clusters 967 → 339 → 184 (sum of the table's cluster counts); drier 50 → 44 → 32. The
+  Bay point sits in a 26-cell cluster (it survives).
+
 ## Next steps
 **M5 (13 Nov):** Leaflet front end, run locally with `python -m http.server` from `site_build/`.
 **(Done) M4 original spec, kept for reference:** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
