@@ -1,0 +1,17 @@
+# Local development environment = pipeline environment (environment.yml) + dev-only tools.
+# Keep the shared list identical to environment.yml.
+name: quest-precip
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - eccodes
+  - cfgrib
+  - xarray
+  - numpy
+  - matplotlib
+  - pytest
+  - pip
+  - cartopy          # dev-only: coastlines for check/validation plots (pipeline/m2_check.py etc.)
+  - pip:
+      - ecmwf-opendata

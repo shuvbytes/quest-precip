@@ -1,4 +1,6 @@
-"""M2 visible check: clipping stats, IST window labels, the regional maximum, and check maps.
+"""DEV-ONLY (needs cartopy from environment-dev.yml; not used by the pipeline or CI).
+
+M2 visible check: clipping stats, IST window labels, the regional maximum, and check maps.
 
 Usage: python pipeline/m2_check.py data/raw/hres_tp_YYYYMMDDHHz.grib2
 Writes PNGs to outputs/checks/ (git-ignored).

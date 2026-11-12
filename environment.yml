@@ -1,3 +1,4 @@
+# Pipeline + CI environment. For local development (check plots) use environment-dev.yml.
 name: quest-precip
 channels:
   - conda-forge
@@ -7,8 +8,7 @@ dependencies:
   - cfgrib           # lets xarray open GRIB via eccodes
   - xarray
   - numpy
-  - matplotlib
-  - cartopy          # coastlines for check plots (not used by the web app)
+  - matplotlib       # renders the map PNGs
   - pytest
   - pip
   - pip:

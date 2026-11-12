@@ -1,4 +1,6 @@
-"""Diagnose differences between our 0.25 deg map and ECMWF's OpenCharts map (M2 follow-up).
+"""DEV-ONLY (validation script; not used by the pipeline or CI).
+
+Diagnose differences between our 0.25 deg map and ECMWF's OpenCharts map (M2 follow-up).
 
 Compares the open-data 0-144 h total at 0.25 deg with the open-data 0.1 deg field of the same run.
 Usage: python pipeline/diagnose_vs_chart.py <0p25 file with step 144> <0p1 file with step 144>
