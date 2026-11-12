@@ -46,7 +46,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
       (packing keys), set the lowest map bin above the quantisation noise, 24 h = TP(t+24) − TP(t) tested against
       summed 3 h amounts, locate the 505 mm max and compare with ECMWF's chart for this run.
 - [x] M3 ENS tpg* probabilities; P(≥10 mm) map; Bay P(≥50/100) check
-- [ ] M4 3857 PNGs + manifest + point grid; alignment check; real compressed transfer size
+- [x] M4 3857 PNGs + manifest + point grid; alignment check (real transfer size: measure in M7 after deploy).
+      Disagreement layer: proposed, awaiting approval, not built.
 - [ ] M5 Leaflet front end locally
 - [ ] M6 client-side point forecast panel (lazy-loaded)
 - [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
@@ -189,8 +190,28 @@ Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `
 Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose_vs_chart.py`,
 `validation_figure.py`, `m3_check.py`, `m3_window_check.py` → `outputs/checks/` (git-ignored). Tests: `python -m pytest`.
 
+## M4 results (12 Nov evening, run 2026-11-12 00z) — `pipeline/render.py`, `pipeline/build.py`
+- Build: `python pipeline/build.py <hres> <ens> [out]` → `site_build/data/` (git-ignored): `frames/*.png`,
+  `manifest.json`, `points.bin`.
+- Frames: 48 HRES 3 h + 11 HRES 24 h + 77 ENS (7 thresholds × 11 windows to 144 h) = 136 indexed PNGs,
+  508 kB in total (1.6–6 kB each), 564 × 583 px, bounds [[4.875, 64.875], [38.125, 100.125]] (cell edges).
+  Rows are resampled to Web Mercator (nearest grid point, no smoothing); index 0 is transparent below each frame's
+  floor. No floor raised this run (3 h 0.061–0.488, 24 h 0.122–0.488, ENS 0.062–1.0).
+- Alignment (`m4_alignment.py`, dev): at Chennai, Kanyakumari, Dondra Head, Mumbai, Chittagong and Karachi the image
+  shows the cell containing the point (0 km). A naive lat/lon image would be 28–111 km off. ECMWF lsm via the
+  same renderer lines up with 10 m coastlines.
+- manifest.json (53 kB): run UTC + IST, each frame's UTC window + exact IST label, units (+ GRIB source units),
+  bins, colours, floor / lowest_drawn / floor_raised, grid + image bounds, point-value wording, points layout,
+  source, ECMWF CC BY 4.0 attribution with a modification notice. Tests check IST = UTC + 05:30 for every label.
+- points.bin: HRES 3 h uint16 (0.1 mm) 1,800,288 B + ENS uint8 (%) 1,443,981 B = 3,244,269 B raw; gzip -9
+  520,561 B (gzip -6 533,957). Decode test: within 0.1 mm / 1 %. The browser's 24 h point value = sum of 8 decoded
+  3 h values: within ±0.35 mm of the map's TP(t+24) − TP(t) (never ≥ 0.5 mm), so no separate 24 h array.
+- **Open for M7:** GitHub Pages may not gzip `application/octet-stream`. Measure the real transfer with curl after
+  deploy. If it is not compressed, ship `points.bin.gz` and decompress in the browser (DecompressionStream).
+
 ## Next steps
-**M4 (next, when the user resumes; wait for the go-ahead):** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
+**Disagreement layer:** proposal given to the user 12 Nov evening; build only after approval.
+**(Done) M4 original spec, kept for reference:** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
 probabilities) using `palette.py` and the fixed legends, with per-frame floor flags; manifest.json (run time UTC,
 IST labels, windows, units, bins, floor_i, source, licence); point grid (uint16 0.1 mm + uint8 %); coastline
 alignment check; report the real compressed transfer size.

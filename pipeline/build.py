@@ -80,11 +80,50 @@ ATTRIBUTION = ("© European Centre for Medium-Range Weather Forecasts (ECMWF). S
                "ECMWF does not endorse it.")
 
 
+def write_points(three, p, out: Path):
+    """points.bin: HRES 3 h amounts as uint16 (0.1 mm units) then ENS probabilities as uint8 (%).
+
+    Little-endian, C order, no header; the layout is described in the manifest ("points").
+    """
+    h = np.round(three.mm.values * 10.0)
+    e = np.round(p.values)
+    if h.max() > 65535 or e.min() < 0 or e.max() > 100:
+        raise ValueError("value outside encodable range")
+    h16 = h.astype("<u2")
+    e8 = e.astype(np.uint8)
+    path = out / "points.bin"
+    with open(path, "wb") as f:
+        f.write(h16.tobytes(order="C"))
+        f.write(e8.tobytes(order="C"))
+    entry = {
+        "file": "points.bin", "byte_order": "little", "bytes": path.stat().st_size,
+        "load": "lazily, on the first click",
+        "arrays": [
+            {"name": "hres_3h", "dtype": "uint16", "scale": 0.1, "units": "mm", "offset": 0,
+             "shape": list(h16.shape), "dims": ["frame (= products.hres_3h.frames order)", "lat (north→south)", "lon (west→east)"]},
+            {"name": "ens_prob", "dtype": "uint8", "scale": 1, "units": "%", "offset": h16.nbytes,
+             "shape": list(e8.shape),
+             "dims": ["threshold (= products.ens_prob.thresholds_mm order)",
+                      "window (= frames_by_threshold order)", "lat (north→south)", "lon (west→east)"]},
+        ],
+    }
+    return path, entry
+
+
+def read_points(path: Path, entry):
+    """Decode points.bin back to (hres_3h mm, ens %) — the same steps the browser will do."""
+    raw = Path(path).read_bytes()
+    a, b = entry["arrays"]
+    h = np.frombuffer(raw, "<u2", count=int(np.prod(a["shape"])), offset=a["offset"]).reshape(a["shape"]) * a["scale"]
+    e = np.frombuffer(raw, np.uint8, count=int(np.prod(b["shape"])), offset=b["offset"]).reshape(b["shape"]) * b["scale"]
+    return h, e
+
+
 def _iso(t):
     return t.strftime("%Y-%m-%dT%H:%MZ")
 
 
-def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, generated_utc=None):
+def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=None, generated_utc=None):
     import datetime as dt
     import json
     from process import UTC, ist_label, window_label
@@ -131,6 +170,7 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, generated
                          "thresholds_mm": [float(t) for t in ens_by_thr],
                          "frames_by_threshold": ens_by_thr},
         },
+        "points": points,
         "source": {"provider": "ECMWF Open Data", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
                    "hres": "stream=oper type=fc param=tp, steps 0–144 h", "ens": "stream=enfo type=ep param=tpg*"},
         "attribution": ATTRIBUTION,
@@ -144,8 +184,10 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
     out = Path(out)
     tp, p, base, packs = load(hres_path, ens_path)
     grid, three, w, frames = render_frames(tp, p, packs, out)
-    mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out)
+    ppath, pentry = write_points(three, p, out)
+    mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out, points=pentry)
     print(f"wrote {mpath} ({mpath.stat().st_size / 1e3:.1f} kB)")
+    print(f"wrote {ppath} ({ppath.stat().st_size:,} bytes)")
     print(f"Run {base:%Y-%m-%d %H:%M} UTC; grid {grid.nlat}x{grid.nlon}; image {grid.width}x{grid.height} px;"
           f" bounds {grid.bounds}")
     for name, fr in frames.items():

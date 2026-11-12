@@ -59,6 +59,26 @@ def test_floors_and_files(built):
     assert "CC BY 4.0" in m["attribution"] and "ECMWF" in m["attribution"]
 
 
+def test_points_roundtrip(built):
+    """Decoding points.bin gives back the original values within 0.1 mm / 1 %."""
+    import numpy as np
+    import xarray as xr
+    from build import HRES_MAX_H, read_points
+    from ens import read_region
+    from process import deaccumulate
+    from region import crop
+    out, m = built
+    h, e = read_points(out / "points.bin", m["points"])
+    tp = crop(xr.open_dataset(HRES[-1], engine="cfgrib", backend_kwargs={"indexpath": ""})["tp"]).load()
+    orig_h = deaccumulate(tp).mm.values
+    p = read_region(str(ENS[-1]))
+    orig_e = p.isel(window=np.where(p.end_h.values <= HRES_MAX_H)[0]).values
+    assert h.shape == orig_h.shape and e.shape == orig_e.shape
+    assert np.abs(h - orig_h).max() <= 0.1
+    assert np.abs(e - orig_e).max() <= 1.0
+    assert m["points"]["bytes"] == h.size * 2 + e.size
+
+
 def _first_bin(m, f):
     P = m["products"]
     if f["file"].startswith("frames/hres3h"):
