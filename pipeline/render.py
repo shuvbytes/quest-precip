@@ -113,12 +113,20 @@ HATCH_INK = "#111111"
 HATCH_EDGE = "#ffffff"
 
 
+HATCH_PX_PER_CELL = 12   # finer than the data frames (4) so each cell holds a whole symbol
+
+
+def hatch_grid(grid: Grid) -> Grid:
+    """Same grid and bounds, more pixels per cell (the overlay is placed by bounds, so it aligns)."""
+    return Grid(grid.lat_n, grid.lon_w, grid.dlat, grid.dlon, grid.nlat, grid.nlon, HATCH_PX_PER_CELL)
+
+
 def hatch_codes(wetter, drier, grid: Grid):
     """Pattern codes per output pixel: 0 transparent, 1 ink, 2 white edge.
 
-    wetter -> diagonal lines; drier -> dots. Ink with a white edge stays visible on
-    both the palest and darkest probability colours, and the shape (not colour) carries
-    the meaning.
+    wetter -> diagonal lines (2 per cell); drier -> ONE round dot centred in each cell, so a
+    single flagged cell always shows a complete symbol. Ink with a white edge stays visible on
+    both the palest and darkest probability colours; the shape (not colour) carries the meaning.
     """
     rows, cols = grid.resample_index()
     wet = np.asarray(wetter, bool)[np.ix_(rows, cols)]
@@ -128,15 +136,19 @@ def hatch_codes(wetter, drier, grid: Grid):
     d = (r + c) % 6
     out[wet & (d == 0)] = 1
     out[wet & (d == 1)] = 2
-    rr, cc = r % 6, c % 6
-    core = (rr >= 2) & (rr <= 3) & (cc >= 2) & (cc <= 3)
-    ring = (rr >= 1) & (rr <= 4) & (cc >= 1) & (cc <= 4) & ~core
-    out[dry & ring] = 2
-    out[dry & core] = 1
+    # position of each pixel inside its source cell, in cell units (-0.5..0.5)
+    plat, _ = grid.pixel_to_latlon(np.arange(grid.height), 0)
+    _, plon = grid.pixel_to_latlon(0, np.arange(grid.width))
+    fy = (plat - (grid.lat_n - rows * grid.dlat)) / grid.dlat
+    fx = (plon - (grid.lon_w + cols * grid.dlon)) / grid.dlon
+    rad = np.hypot(fy[:, None], fx[None, :])
+    out[dry & (rad <= 0.36)] = 2
+    out[dry & (rad <= 0.24)] = 1
     return out
 
 
 def render_hatch(wetter, drier, grid: Grid, path: Path):
+    grid = hatch_grid(grid)
     codes = hatch_codes(wetter, drier, grid)
     img = Image.fromarray(codes, mode="P")
     pal = [0, 0, 0] + [int(h[i:i + 2], 16) for h in (HATCH_INK, HATCH_EDGE) for i in (1, 3, 5)]

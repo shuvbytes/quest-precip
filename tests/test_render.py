@@ -42,6 +42,21 @@ def test_hatch_only_inside_flagged_cells():
     assert (codes[in_wet] == 1).any() and (codes[in_dry] == 1).any()
 
 
+def test_drier_dot_is_whole_and_centred_in_its_cell():
+    from render import hatch_codes, hatch_grid
+    g = hatch_grid(Grid.from_coords(LAT, LON))
+    dry = np.zeros((g.nlat, g.nlon), bool)
+    dry[100, 20] = True                                  # one isolated cell
+    codes = hatch_codes(np.zeros_like(dry), dry, g)
+    rr, cc = np.nonzero(codes == 1)
+    # ink forms one compact blob in the middle of the cell, surrounded by white
+    assert rr.max() - rr.min() <= 6 and cc.max() - cc.min() <= 6
+    r0, c0 = g.latlon_to_pixel(LAT[100], LON[20])         # cell centre in pixels
+    assert abs(rr.mean() - r0) <= 1 and abs(cc.mean() - c0) <= 1
+    ring = np.nonzero(codes == 2)
+    assert ring[0].min() < rr.min() and ring[0].max() > rr.max()
+
+
 def test_classify_bins_floor_and_over():
     bins = [0.5, 1, 2, 5]
     v = np.array([np.nan, 0.0, 0.49, 0.5, 0.99, 1.0, 4.9, 5.0, 999])
