@@ -22,8 +22,9 @@ IST = dt.timezone(dt.timedelta(hours=5, minutes=30), name="IST")
 
 TO_MM = {"m": 1000.0, "mm": 1.0, "kg m**-2": 1.0}  # 1 kg m-2 of water = 1 mm depth
 
-# Candidate lowest map bins (mm). The chosen one must be at least 2x the worst packing error.
-LOWEST_BIN_CANDIDATES = (0.5, 1.0, 2.0)
+# Fixed legends (mm), the same for every frame so frames can be compared.
+BINS_3H = (0.5, 1, 2, 5, 10, 20, 50, 100)
+BINS_24H = (1, 2.5, 5, 10, 20, 50, 100, 200)
 
 
 def mm_factor(units: str) -> float:
@@ -113,9 +114,24 @@ def window_label(base_utc: dt.datetime, start_h: int, end_h: int) -> str:
 
 # ---------- colour scale floor ----------
 
-def lowest_bin(max_error_mm: float) -> float:
-    """Smallest candidate bin that is at least twice the worst packing error."""
-    for c in LOWEST_BIN_CANDIDATES:
-        if c >= 2 * max_error_mm:
-            return c
-    raise ValueError(f"Packing error {max_error_mm} mm too large for the colour scale")
+def interval_floor(packs, start_h, end_h, units: str) -> np.ndarray:
+    """Noise floor per interval in mm: 2 * q_i, q_i = max(quantum at start step, quantum at end step).
+
+    `packs` is the list from packing.read_packing (quantum in the field's own units).
+    """
+    q = {p.step: p.quantum for p in packs}
+    f = mm_factor(units)
+    return np.array([2 * max(q[int(s)], q[int(e)]) * f for s, e in zip(start_h, end_h)])
+
+
+def lowest_visible(bins, floor_mm: float) -> tuple[float, bool]:
+    """Lowest bin edge drawn for a frame, and whether it had to be raised above bins[0].
+
+    Normally the legend's first edge is already above the frame's noise floor. If it is not
+    (a run with very large totals has a coarse quantum), the frame starts at the first edge
+    at or above the floor, and the UI must say so.
+    """
+    for edge in bins:
+        if edge >= floor_mm:
+            return float(edge), edge != bins[0]
+    raise ValueError(f"Noise floor {floor_mm} mm is above every legend edge {bins}")

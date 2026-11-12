@@ -21,8 +21,9 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 matplotlib.use("Agg")
 
 from packing import read_packing
-from process import (base_time_utc, deaccumulate, difference, ist_label, lowest_bin,
-                     step_hours, window_label, window_totals)
+from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, difference,
+                     interval_floor, ist_label, lowest_visible, step_hours, window_label,
+                     window_totals)
 from region import crop
 
 OUT = Path(__file__).resolve().parent.parent / "outputs" / "checks"
@@ -61,31 +62,38 @@ def main(path: str) -> None:
     print(f"Run: {base:%Y-%m-%d %H:%M} UTC  = {ist_label(base)}   units in file: {tp.attrs['units']!r}")
 
     packs = read_packing(path)
-    qmax_mm = max(p.quantum for p in packs) * 1000
-    floor = lowest_bin(qmax_mm)
-    print(f"Largest packing quantum this run: {qmax_mm:.4f} mm -> lowest map bin {floor} mm")
+    units = tp.attrs["units"]
 
     three = deaccumulate(tp)
+    f3 = interval_floor(packs, three.start_h, three.end_h, units)
+    low3 = [lowest_visible(BINS_3H, f) for f in f3]
     print(f"\n3 h intervals: {len(three.start_h)}  clipped points total "
           f"{int(three.n_clipped.sum())} of {three.mm.size} "
           f"({100 * three.n_clipped.sum() / three.mm.size:.3f} %), most negative raw "
           f"{three.min_raw_mm.min():.4f} mm")
-    above = (three.mm.values > 0) & (three.mm.values < floor)
-    print(f"3 h amounts > 0 but below {floor} mm (shown as no rain): {int(above.sum())} "
-          f"({100 * above.sum() / three.mm.size:.2f} %)")
+    print(f"3 h noise floor 2q per interval: {f3.min():.3f}-{f3.max():.3f} mm; legend starts "
+          f"{BINS_3H[0]} mm; frames needing a raised lowest bin: {sum(r for _, r in low3)}")
+    hidden = sum(int(((three.mm.values[k] > 0) & (three.mm.values[k] < low3[k][0])).sum())
+                 for k in range(len(f3)))
+    print(f"3 h amounts > 0 but below the lowest drawn bin: {hidden} "
+          f"({100 * hidden / three.mm.size:.2f} %)")
 
     w = window_totals(tp)
-    print("\n24 h windows (ENS windows, both layers):")
+    f24 = interval_floor(packs, w.start_h, w.end_h, units)
+    print(f"\n24 h windows (ENS windows, both layers); legend starts {BINS_24H[0]} mm:")
     for k, (s, e) in enumerate(zip(w.start_h, w.end_h)):
+        lo, raised = lowest_visible(BINS_24H, f24[k])
         print(f"  {s:3d}-{e:3d} h  {window_label(base, s, e)}   max {w.mm.values[k].max():6.1f} mm"
-              f"   clipped {int(w.n_clipped[k])}")
+              f"   clipped {int(w.n_clipped[k]):4d}   floor 2q {f24[k]:.3f} mm -> lowest bin {lo}"
+              f"{' (RAISED)' if raised else ''}")
+    floor, _ = lowest_visible(BINS_24H, f24[0])
 
     total = difference(tp, [0], [int(hours[-1])])
     f = total.mm.isel(window=0)
     iy, ix = np.unravel_index(int(np.argmax(f.values)), f.shape)
     lat, lon = float(f.latitude[iy]), float(f.longitude[ix])
-    print(f"\nMax 0-{hours[-1]} h total: {f.values[iy, ix]:.1f} mm at {lat:.2f} N, {lon:.2f} E "
-          f"(grid cell {lat-0.125:.3f}-{lat+0.125:.3f} N, {lon-0.125:.3f}-{lon+0.125:.3f} E)")
+    print(f"\nMax 0-{hours[-1]} h total: {f.values[iy, ix]:.1f} mm at grid point {lat:.2f} N, {lon:.2f} E "
+          f"(a point sample, not a box mean: see docs/validation)")
     print("  3 h amounts at that cell (mm), by window start hour:")
     series = three.mm.values[:, iy, ix]
     print("  " + "  ".join(f"{h}:{v:.0f}" for h, v in zip(three.start_h, series) if v >= 1))
@@ -94,8 +102,8 @@ def main(path: str) -> None:
 
     tag = f"{base:%Y%m%d%H}z"
     draw(f"ECMWF IFS HRES 24 h total, {window_label(base, 0, 24)}\n"
-         f"run {base:%Y-%m-%d %H} UTC; cells < {floor} mm left blank (below packing noise)",
-         w.mm.isel(window=0), [floor, 2.5, 5, 10, 20, 50, 100, 200], OUT / f"hres_24h_0-24_{tag}.png")
+         f"run {base:%Y-%m-%d %H} UTC; cells < {floor:g} mm left blank",
+         w.mm.isel(window=0), [b for b in BINS_24H if b >= floor], OUT / f"hres_24h_0-24_{tag}.png")
     draw(f"ECMWF IFS HRES total {window_label(base, 0, int(hours[-1]))}\n"
          f"max {f.values[iy, ix]:.0f} mm at {lat:.2f}N {lon:.2f}E (x)",
          f, [1, 5, 10, 25, 50, 100, 200, 300, 400, 500], OUT / f"hres_total_0-144_{tag}.png",

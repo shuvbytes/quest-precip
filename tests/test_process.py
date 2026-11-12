@@ -5,8 +5,10 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from process import (UTC, base_time_utc, deaccumulate, difference, ens_window_starts,
-                     ist_label, lowest_bin, mm_factor, window_label, window_totals)
+from packing import FieldPacking
+from process import (BINS_3H, BINS_24H, UTC, base_time_utc, deaccumulate, difference,
+                     ens_window_starts, interval_floor, ist_label, lowest_visible, mm_factor,
+                     window_label, window_totals)
 
 RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 
@@ -116,6 +118,34 @@ def test_ist_labels():
 
 # ---- colour scale floor ----
 
-def test_lowest_bin_above_noise():
-    assert lowest_bin(0.2441) == 0.5
-    assert lowest_bin(0.49) == 1.0
+def _packs(step_E):
+    return [FieldPacking(step=s, packing_type="grid_ccsds", bits=0 if E is None else 12,
+                         E=E or 0, D=0, R=0.0, quantum=0.0 if E is None else 2.0**E)
+            for s, E in step_E]
+
+
+def test_interval_floor_uses_coarser_end():
+    packs = _packs([(0, None), (3, -15), (6, -14), (24, -12)])
+    f = interval_floor(packs, [0, 3, 0], [3, 6, 24], "m")
+    np.testing.assert_allclose(f, [2 * 2**-15 * 1000, 2 * 2**-14 * 1000, 2 * 2**-12 * 1000])
+
+
+def test_lowest_visible_normal_and_raised():
+    assert lowest_visible(BINS_3H, 0.49) == (0.5, False)
+    assert lowest_visible(BINS_3H, 0.98) == (1.0, True)     # coarse-quantum run: raised, flagged
+    assert lowest_visible(BINS_24H, 0.49) == (1.0, False)
+    assert BINS_24H[0] >= 1.0
+    with pytest.raises(ValueError):
+        lowest_visible(BINS_3H, 500)
+
+
+@pytest.mark.skipif(not list(RAW.glob("hres_tp_*.grib2")), reason="no real GRIB downloaded")
+def test_real_run_floors_below_legend():
+    from packing import read_packing
+    path = sorted(RAW.glob("hres_tp_*.grib2"))[-1]
+    packs = read_packing(str(path))
+    steps = [p.step for p in packs]
+    f3 = interval_floor(packs, steps[:-1], steps[1:], "m")
+    starts = ens_window_starts(steps[-1])
+    f24 = interval_floor(packs, starts, starts + 24, "m")
+    assert f3.max() <= BINS_3H[0] and f24.max() <= BINS_24H[0]

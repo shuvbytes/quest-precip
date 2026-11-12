@@ -73,9 +73,13 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   grid: fully explained). **39–42 h has the same E on both sides**; rounding on one fixed grid is monotone,
   so there the values ECMWF packed already decreased by < 1 quantum (0.061 mm). The cause is probably an
   earlier processing step, but it is not provable from this file. Either way the error is bounded by q.
-- Lowest map bin = smallest of (0.5, 1, 2) mm that is ≥ 2 × the run's largest quantum → 0.5 mm this run
-  (computed per run, `process.lowest_bin`). 12.3 % of 3 h cells are > 0 but < 0.5 mm: the UI must say
-  "amounts below 0.5 mm not shown", because ECMWF's own charts start at 0.1 mm.
+- Display floor (decided 12 Nov, replaces an earlier per-run floor): per interval, floor_i = 2 × q_i, where
+  q_i = max(quantum at start, quantum at end) (`process.interval_floor`). Fixed legends:
+  3 h 0.5, 1, 2, 5, 10, 20, 50, 100 mm; 24 h 1, 2.5, 5, 10, 20, 50, 100, 200 mm. If floor_i > the first edge, that frame
+  starts at the next edge and is flagged (`process.lowest_visible`); the manifest must carry floor_i + the flag.
+  This run: 3 h floors 0.061–0.488 mm (thin margin under 0.5), 24 h floors 0.122–0.488 mm; no frame raised.
+  12.3 % of 3 h cells are > 0 but < 0.5 mm: the UI must say "amounts below 0.5 mm (3 h) / 1 mm (24 h) not
+  shown", because ECMWF's own charts start at 0.1 mm.
 - Clipping: 4,284 of 900,144 3 h values (0.48 %) clipped; most negative −0.122 mm.
 - 24 h totals = TP(t+24) − TP(t) on ENS windows; tests prove they equal the unclipped sum of 3 h amounts
   exactly, and the clipped sum exceeds them by at most the clipped noise.
