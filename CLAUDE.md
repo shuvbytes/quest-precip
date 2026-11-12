@@ -24,11 +24,12 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   up in Leaflet) + manifest.json + point grid → `gh-pages` branch.
 - Basemap: no political borders + India official boundary GeoJSON overlay (source cited).
 - Times: UTC everywhere internally; IST only at display. Units: read from GRIB attrs, convert m → mm explicitly.
+- Tooling: `gh` CLI installed and logged in (user confirmed) → used for repo creation / Pages in M7.
 - Env: conda env `quest-precip` (Python 3.11, conda-forge eccodes/cfgrib). System Python 3.9 is not used.
 
 ## Milestones
 - [x] M0 repo, env, this file (Python 3.11.18, eccodes 2.50.0, cfgrib 0.9.15.1, xarray 2026.9.0, ecmwf-opendata 0.3.35)
-- [ ] M1 download one HRES run; print units/stepType/base time/grid
+- [x] M1 download one HRES run; print units/stepType/base time/grid
 - [ ] M2 de-accumulate to 3 h / 24 h mm; tests; one map
 - [ ] M3 ENS tpg* probabilities; P(≥10 mm) map
 - [ ] M4 3857 PNGs + manifest + point grid; alignment check
@@ -38,9 +39,22 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - [ ] M8 honesty/UX polish, README
 - [ ] Buffer (15 Nov AM): fixes, optional FastAPI
 
+## Data facts read from the GRIB (M1, run 2026-11-12 00z)
+- `tp`: units `m`, `GRIB_stepType = accum` (accumulated since run start), GRIB edition 2, regular_ll 0.25°.
+- Base time coordinate `time` = forecast_reference_time; cfgrib gives naive datetime64. GRIB2 reference
+  times are UTC, so we attach UTC explicitly and convert to IST (UTC+05:30) only for display.
+- Steps 0–144 h every 3 h (49 steps); `valid_time` = time + step.
+- Global grid: lat 90 → -90 (descending), lon -180 → 179.75 (not 0–360).
+- Region crop 5–38°N, 65–100°E → 133 × 141 points.
+- Accumulated values sometimes **decrease** slightly between steps (min −0.000122 m = −0.12 mm), which is
+  GRIB packing noise. M2 must clip negative interval totals to 0 and report how many were clipped.
+- 6-day regional max 0.505 m (505 mm).
+
 ## Status
-M0 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
+M0, M1 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
+Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
+Inspect: `python pipeline/inspect_grib.py <file>`.
 
 ## Next steps
-M1: download the latest HRES 00z/12z `tp` run for the region; print GRIB units, stepType, base time
-(UTC), steps, grid shape and bbox before writing any processing code.
+M2: de-accumulate to 3 h and 24 h totals in mm (×1000 from the `units` attribute, not hard-coded blindly),
+clip packing negatives, pytest for the maths, one matplotlib map.
