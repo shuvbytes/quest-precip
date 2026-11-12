@@ -45,7 +45,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - [x] M2 de-accumulate to 3 h / 24 h mm; tests; one map. Also: prove the negative diffs come from GRIB packing
       (packing keys), set the lowest map bin above the quantisation noise, 24 h = TP(t+24) − TP(t) tested against
       summed 3 h amounts, locate the 505 mm max and compare with ECMWF's chart for this run.
-- [ ] M3 ENS tpg* probabilities; P(≥10 mm) map
+- [x] M3 ENS tpg* probabilities; P(≥10 mm) map; Bay P(≥50/100) check
 - [ ] M4 3857 PNGs + manifest + point grid; alignment check; real compressed transfer size
 - [ ] M5 Leaflet front end locally
 - [ ] M6 client-side point forecast panel (lazy-loaded)
@@ -105,12 +105,42 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   the 0.1° grid, |0.25 − 0.1| has median 0.000 mm (99th pct 0.73). |0.25 − mean of 0.1 cells in its box|
   has median 0.244 mm, 99th pct 10.7 mm, max 97 mm. So UI text must NOT say "average over a 25 km box".
 
+## Decided after M2 follow-up (12 Nov)
+- Point panel text (M6), exactly: "Model value at the nearest grid point (0.25°, ~25 km spacing). Rain can vary
+  a lot within that distance." Plus "nearby: X–Y mm" = min–max over the 3×3 neighbouring points (fewer at edges).
+- Validation record: `docs/validation/` (md + one side-by-side image; the only image deliberately in git).
+- cartopy is dev-only: `environment.yml` = pipeline/CI, `environment-dev.yml` = + cartopy (local env built from it).
+
+## M3 findings (run 2026-11-12 00z, `pipeline/ens.py`, `pipeline/m3_check.py`)
+- **Run selection changed.** Since IFS 50r1 (May 2026) 06z/18z HRES runs are also under `stream=oper` and
+  reach 144 h, so `latest()` returned 06z (our guard caught it). ENS `ep` exists only for 00z/12z (checked
+  per hour). `fetch.latest_main_run` now picks the newest 00z/12z run where BOTH HRES (step 144) and ENS
+  (last window) are published.
+- ENS file: 84 messages = 7 thresholds × 12 windows (0–24 … 132–156). Units `%`, stepType accum,
+  probabilityType 3 = "above lower limit"; thresholds from keys = 1, 5, 10, 20, 25, 50, 100 (mm; ECMWF names say
+  "at least X mm"). Packing quantum: 0.031 % (tpg1–20), 0.5 % (tpg25–100).
+- **Bug caught:** the first reader flipped latitude (eccodes `distinctLatitudes` order). Fixed by sorting
+  descending and asserting against `latitudeOfFirstGridPointInDegrees`. `tests/test_ens.py` checks orientation
+  against HRES: median P(≥1 mm) where HRES 0–24 h ≥ 20 mm = 100 % (flipped: 0 %).
+- Probabilities are **not** multiples of 1/51 (likely interpolated from the native grid); the file does not
+  state the ensemble size. UI shows "%" only, never "k of 51 members".
+- 0–24 h agreement: HRES 1–10 mm → median P(≥10) 5 %; 10–20 mm → 68 %; 20–50 mm → 94 %; ≥ 50 mm → 100 %.
+- **Bay check** at 15.00N 86.50E (HRES 505 mm cell), point (3×3 range):
+  96–120 h: HRES 92 mm (68–111), P≥50 50 % (42–57), P≥100 21 % (11–28);
+  108–132 h: HRES 369 mm (128–369), P≥50 56 % (50–62), P≥100 22 % (19–24);
+  120–144 h: HRES 382 mm (111–382), P≥50 47 % (40–48), P≥100 20 % (19–27);
+  132–156 h: P≥50 31 %, P≥100 12 % (beyond HRES range).
+  So HRES's 370–380 mm/24 h is an extreme scenario; the ensemble gives ~1-in-5 chance of ≥ 100 mm there.
+  The ENS P(≥100) peak in the Bay is 42 % at 13.00N 84.75E in 84–108 h (earlier and further SW). This is the
+  core story the 24 h mode should tell.
+
 ## Status
-M0, M1, M2 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
+M0, M1, M2, M3 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
 Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
 Inspect: `python pipeline/inspect_grib.py <file>`; packing proof: `python pipeline/packing.py <file>`;
 M2 check + maps: `python pipeline/m2_check.py <file>` → `outputs/checks/` (git-ignored). Tests: `python -m pytest`.
 
 ## Next steps
-M3: fetch ENS `type=ep` `tpg*` for the same run; print the params, windows, units (expect %) as read from the
-GRIB; P(≥10 mm / 24 h) map for 0–24 h shown beside the HRES 24 h total for the same window.
+M4: render EPSG:3857 PNGs (3 h + 24 h HRES, ENS probabilities) with fixed legends and per-frame floor flags;
+manifest.json (run time UTC, IST labels, windows, units, bins, floor_i, source, licence); point grid
+(uint16 0.1 mm + uint8 %); coastline alignment check; report the real compressed transfer size.
