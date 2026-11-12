@@ -23,6 +23,7 @@ def _get(gid, key):
 
 def read_ens_probs(path: str) -> xr.DataArray:
     fields = {}
+    quanta = {}
     meta = defaultdict(set)
     lats = lons = None
     with open(path, "rb") as f:
@@ -46,6 +47,9 @@ def read_ens_probs(path: str) -> xr.DataArray:
                     assert np.isclose(lats[0], north), (lats[0], north)
                     assert len(lats) == nj and len(lons) == ni
                 fields[(thr, win)] = eccodes.codes_get_values(gid).reshape(nj, ni)
+                bits = _get(gid, "bitsPerValue")
+                quanta[(thr, win)] = 0.0 if bits == 0 else (
+                    2.0 ** _get(gid, "binaryScaleFactor") * 10.0 ** -_get(gid, "decimalScaleFactor"))
                 for k in ("units", "stepType", "dataDate", "dataTime", "shortName"):
                     meta[k].add(str(_get(gid, k)))
             finally:
@@ -70,6 +74,9 @@ def read_ens_probs(path: str) -> xr.DataArray:
             "threshold": ("threshold", np.array(thresholds), {"units": "mm (24 h total)"}),
             "start_h": ("window", np.array([w[0] for w in windows])),
             "end_h": ("window", np.array([w[1] for w in windows])),
+            # GRIB packing quantum of each message, in % (sets the display floor, as for HRES)
+            "quantum": (("threshold", "window"),
+                        np.array([[quanta[(t, w)] for w in windows] for t in thresholds])),
             "latitude": lats,
             "longitude": lons_signed[order],
         },
