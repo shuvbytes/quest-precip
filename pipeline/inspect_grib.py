@@ -10,16 +10,7 @@ import sys
 import numpy as np
 import xarray as xr
 
-# Region agreed in CLAUDE.md: India + surrounding seas
-LAT_MIN, LAT_MAX = 5.0, 38.0
-LON_MIN, LON_MAX = 65.0, 100.0
-
-
-def crop(da: xr.DataArray) -> xr.DataArray:
-    # ECMWF 0.25 deg grids list latitude north -> south, so slice from max to min.
-    lat_desc = bool(da.latitude[0] > da.latitude[-1])
-    lat_slice = slice(LAT_MAX, LAT_MIN) if lat_desc else slice(LAT_MIN, LAT_MAX)
-    return da.sel(latitude=lat_slice, longitude=slice(LON_MIN, LON_MAX))
+from region import crop
 
 
 def main(path: str) -> None:

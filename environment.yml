@@ -8,6 +8,7 @@ dependencies:
   - xarray
   - numpy
   - matplotlib
+  - cartopy          # coastlines for check plots (not used by the web app)
   - pytest
   - pip
   - pip:

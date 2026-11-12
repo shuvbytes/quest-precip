@@ -42,7 +42,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 ## Milestones
 - [x] M0 repo, env, this file (Python 3.11.18, eccodes 2.50.0, cfgrib 0.9.15.1, xarray 2026.9.0, ecmwf-opendata 0.3.35)
 - [x] M1 download one HRES run; print units/stepType/base time/grid
-- [ ] M2 de-accumulate to 3 h / 24 h mm; tests; one map. Also: prove the negative diffs come from GRIB packing
+- [x] M2 de-accumulate to 3 h / 24 h mm; tests; one map. Also: prove the negative diffs come from GRIB packing
       (packing keys), set the lowest map bin above the quantisation noise, 24 h = TP(t+24) − TP(t) tested against
       summed 3 h amounts, locate the 505 mm max and compare with ECMWF's chart for this run.
 - [ ] M3 ENS tpg* probabilities; P(≥10 mm) map
@@ -65,11 +65,32 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   GRIB packing noise. M2 must clip negative interval totals to 0 and report how many were clipped.
 - 6-day regional max 0.505 m (505 mm).
 
+## M2 findings (run 2026-11-12 00z)
+- Packing (`pipeline/packing.py`): every message is `grid_ccsds`, 12 bits, D = 0, R = 0, with E going from
+  −15 to −12 as totals grow, so quantum q = 2^E m = 0.0305 → 0.2441 mm. Every decoded value lies exactly on
+  its grid (checked). Every negative change is within −(q1+q2)/2.
+  Negatives occur in only 4 intervals: 3–6, 48–51 and 69–72 h are where E changes (re-rounding onto a coarser
+  grid: fully explained). **39–42 h has the same E on both sides**; rounding on one fixed grid is monotone,
+  so there the values ECMWF packed already decreased by < 1 quantum (0.061 mm). The cause is probably an
+  earlier processing step, but it is not provable from this file. Either way the error is bounded by q.
+- Lowest map bin = smallest of (0.5, 1, 2) mm that is ≥ 2 × the run's largest quantum → 0.5 mm this run
+  (computed per run, `process.lowest_bin`). 12.3 % of 3 h cells are > 0 but < 0.5 mm: the UI must say
+  "amounts below 0.5 mm not shown", because ECMWF's own charts start at 0.1 mm.
+- Clipping: 4,284 of 900,144 3 h values (0.48 %) clipped; most negative −0.122 mm.
+- 24 h totals = TP(t+24) − TP(t) on ENS windows; tests prove they equal the unclipped sum of 3 h amounts
+  exactly, and the clipped sum exceeds them by at most the clipped noise.
+- Max 0–144 h total 505.4 mm at 15.00°N 86.50°E (central Bay of Bengal, open sea), mostly 123–132 h
+  (~290 mm in 9 h): a late-run Bay low/cyclone signal. **Matches ECMWF's own chart** (OpenCharts
+  `medium-rain-acc`, projection `opencharts_southern_asia`, base 2026-11-12 00 UTC, +144 h): same N–S
+  300–1000 mm streak at ~85–87°E, 9–15°N, the same small separate speck to the south, and the same 100–300 mm area
+  in the southern Bay. OpenCharts API: `https://charts.ecmwf.int/opencharts-api/v1/products/medium-rain-acc/?base_time=...&valid_time=...&projection=opencharts_southern_asia`.
+
 ## Status
-M0, M1 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
+M0, M1, M2 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
 Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
-Inspect: `python pipeline/inspect_grib.py <file>`.
+Inspect: `python pipeline/inspect_grib.py <file>`; packing proof: `python pipeline/packing.py <file>`;
+M2 check + maps: `python pipeline/m2_check.py <file>` → `outputs/checks/` (git-ignored). Tests: `python -m pytest`.
 
 ## Next steps
-M2: de-accumulate to 3 h and 24 h totals in mm (×1000 from the `units` attribute, not hard-coded blindly),
-clip packing negatives, pytest for the maths, one matplotlib map.
+M3: fetch ENS `type=ep` `tpg*` for the same run; print the params, windows, units (expect %) as read from the
+GRIB; P(≥10 mm / 24 h) map for 0–24 h shown beside the HRES 24 h total for the same window.
