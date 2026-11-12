@@ -1,7 +1,8 @@
 """DEV-ONLY (needs cartopy from environment-dev.yml; not used by the pipeline or CI).
 
-M3 visible check: ENS tpg* contents, P(>=10 mm) map beside the HRES 24 h total for the same
-window, and ENS P(>=50) / P(>=100) around the Bay of Bengal maximum.
+M3 visible check: ENS tpg* contents, HRES 24 h total beside ENS P(>=10 mm) for the same window
+(HRES 10 mm contour drawn on the ENS panel), a like-for-like >=1 mm comparison for NE India,
+and ENS P(>=50) / P(>=100) around the Bay of Bengal maximum.
 Usage: python pipeline/m3_check.py <hres_tp file> <ens_tpg file>
 """
 from __future__ import annotations
@@ -20,26 +21,32 @@ from matplotlib.colors import BoundaryNorm, ListedColormap
 matplotlib.use("Agg")
 
 from ens import read_region
+from palette import LAND, OCEAN, PROB, RAIN
 from process import BINS_24H, base_time_utc, window_label, window_totals
 from region import crop
 
 OUT = Path(__file__).resolve().parent.parent / "outputs" / "checks"
 BAY = (15.00, 86.50)   # 505 mm HRES 0-144 h maximum (M2)
 PROB_BINS = [2, 10, 25, 50, 75, 90, 100]
+NE = (85, 100, 20, 30)  # lon0, lon1, lat0, lat1
 
 
-def panel(ax, field, bins, cmap_name, label, title, extend="neither"):
-    cmap = ListedColormap(plt.get_cmap(cmap_name)(np.linspace(0.2, 1, len(bins) - 1)))
+def panel(ax, field, bins, colours, label, title, extent=(65, 100, 5, 38), extend="neither",
+          contour=None, contour_level=None, mark=True):
+    cmap = ListedColormap(colours[:len(bins) - 1])
     cmap.set_under((1, 1, 1, 0))
-    # Values >= the last edge (e.g. exactly 100 %, or > 200 mm) take the top colour.
-    cmap.set_over(cmap(cmap.N - 1))
-    ax.add_feature(cfeature.LAND, facecolor="#f2efe9")
-    ax.add_feature(cfeature.OCEAN, facecolor="#e6eef5")
+    cmap.set_over(colours[len(bins) - 1] if len(colours) >= len(bins) else colours[-1])
+    ax.add_feature(cfeature.LAND, facecolor=LAND)
+    ax.add_feature(cfeature.OCEAN, facecolor=OCEAN)
     m = ax.pcolormesh(field.longitude, field.latitude, field.values, cmap=cmap,
                       norm=BoundaryNorm(bins, cmap.N), shading="nearest", transform=ccrs.PlateCarree())
-    ax.coastlines("10m", lw=0.6)
-    ax.plot(BAY[1], BAY[0], "kx", ms=7, transform=ccrs.PlateCarree())
-    ax.set_extent([65, 100, 5, 38], crs=ccrs.PlateCarree())
+    if contour is not None:
+        ax.contour(contour.longitude, contour.latitude, contour.values, levels=[contour_level],
+                   colors="black", linewidths=0.9, transform=ccrs.PlateCarree())
+    ax.coastlines("10m", lw=0.6, color="#555555")
+    if mark:
+        ax.plot(BAY[1], BAY[0], "kx", ms=7, transform=ccrs.PlateCarree())
+    ax.set_extent(extent, crs=ccrs.PlateCarree())
     ax.gridlines(draw_labels=["left", "bottom"], lw=0.3, alpha=0.5)
     plt.colorbar(m, ax=ax, orientation="horizontal", pad=0.06, shrink=0.85, label=label,
                  ticks=bins, format="%g", extend=extend)
@@ -63,34 +70,56 @@ def main(hres_path, ens_path):
         mx = p.isel(window=k).max(dim=("latitude", "longitude")).values
         print(f"  {s:3d}-{e:<4d} {window_label(base, s, e):48s}" + "".join(f"  {v:5.0f}" for v in mx))
 
-    # --- side-by-side map, window 0-24 ---
     lab = window_label(base, 0, 24)
-    fig, axs = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={"projection": ccrs.PlateCarree()})
-    panel(axs[0], w.mm.isel(window=0), list(BINS_24H), "YlGnBu", "mm",
-          f"HRES (one run): 24 h total\n{lab}", extend="max")
-    panel(axs[1], p.sel(threshold=10).isel(window=0), PROB_BINS, "PuRd", "%",
-          f"ENS (ensemble): chance of ≥ 10 mm in 24 h\n{lab}")
-    fig.suptitle(f"ECMWF IFS, run {base:%Y-%m-%d %H} UTC. x = Bay of Bengal 0–144 h maximum", fontsize=10)
+    h0 = w.mm.isel(window=0)
     OUT.mkdir(parents=True, exist_ok=True)
-    out = OUT / f"m3_hres24_vs_p10_0-24_{base:%Y%m%d%H}z.png"
-    fig.savefig(out, dpi=100, bbox_inches="tight")
-    print(f"\nwrote {out}")
 
-    # --- agreement between the two layers in window 0-24 ---
-    h = w.mm.values[0]
-    p10 = p.sel(threshold=10).isel(window=0).values
-    print("\n0-24 h agreement, cells by HRES total vs ENS P(>=10 mm):")
-    for lo, hi in [(0, 1), (1, 10), (10, 20), (20, 50), (50, 1e9)]:
-        m = (h >= lo) & (h < hi)
-        print(f"  HRES {lo:>3g}-{hi if hi < 1e9 else 'inf':>4} mm: {m.sum():5d} cells, ENS P(>=10) "
-              f"median {np.median(p10[m]):5.1f} %, 10-90 pct {np.percentile(p10[m], 10):5.1f}-"
-              f"{np.percentile(p10[m], 90):5.1f} %")
+    # --- Figure 1: full region, HRES 24 h | ENS P(>=10) with HRES 10 mm contour ---
+    fig, axs = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={"projection": ccrs.PlateCarree()})
+    panel(axs[0], h0, list(BINS_24H), RAIN, "mm", f"HRES (one run): 24 h total\n{lab}", extend="max")
+    panel(axs[1], p.sel(threshold=10).isel(window=0), PROB_BINS, PROB, "%",
+          f"ENS: chance of ≥ 10 mm in 24 h; black line = HRES 10 mm\n{lab}",
+          contour=h0, contour_level=10)
+    fig.suptitle(f"ECMWF IFS, run {base:%Y-%m-%d %H} UTC. x = Bay of Bengal 0–144 h maximum", fontsize=10)
+    out1 = OUT / f"m3_hres24_vs_p10_0-24_{base:%Y%m%d%H}z.png"
+    fig.savefig(out1, dpi=100, bbox_inches="tight")
+    plt.close(fig)
+
+    # --- Figure 2: NE India, like for like at 1 mm ---
+    lon0, lon1, lat0, lat1 = NE
+    ext = (lon0, lon1, lat0, lat1)
+    fig, axs = plt.subplots(1, 2, figsize=(14, 6), subplot_kw={"projection": ccrs.PlateCarree()})
+    panel(axs[0], h0, list(BINS_24H), RAIN, "mm",
+          f"HRES 24 h total (coloured from 1 mm)\n{lab}", extent=ext, extend="max", mark=False)
+    panel(axs[1], p.sel(threshold=1).isel(window=0), PROB_BINS, PROB, "%",
+          f"ENS: chance of ≥ 1 mm in 24 h; black line = HRES 1 mm\n{lab}",
+          extent=ext, contour=h0, contour_level=1, mark=False)
+    fig.suptitle("NE India / Bangladesh / Myanmar, 20–30°N 85–100°E", fontsize=10)
+    out2 = OUT / f"m3_ne_hres24_vs_p1_0-24_{base:%Y%m%d%H}z.png"
+    fig.savefig(out2, dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\nwrote {out1}\nwrote {out2}")
+
+    # --- agreement tables ---
+    def agree(region_name, hh, pp, thr):
+        print(f"\n{region_name}: HRES >= {thr} mm vs ENS P(>={thr}), window 0-24 h")
+        for name, m in [(f"HRES >= {thr} mm", hh >= thr), (f"HRES <  {thr} mm", hh < thr)]:
+            if m.sum():
+                print(f"  {name}: {m.sum():5d} cells, ENS P median {np.median(pp[m]):5.1f} %, "
+                      f"10-90 pct {np.percentile(pp[m], 10):5.1f}-{np.percentile(pp[m], 90):5.1f} %")
+        both = ((hh >= thr) == (pp >= 50)).mean()
+        print(f"  cells where (HRES >= {thr}) matches (P >= 50 %): {100 * both:.1f} %")
+
+    sel = dict(latitude=slice(lat1, lat0), longitude=slice(lon0, lon1))
+    for thr in (1, 10):
+        agree("Whole region", h0.values, p.sel(threshold=thr).isel(window=0).values, thr)
+        agree("NE 20-30N 85-100E", h0.sel(**sel).values,
+              p.sel(threshold=thr).isel(window=0).sel(**sel).values, thr)
 
     # --- Bay check ---
     iy = int(np.argmin(abs(p.latitude.values - BAY[0])))
     ix = int(np.argmin(abs(p.longitude.values - BAY[1])))
-    print(f"\nBay of Bengal maximum cell {BAY[0]:.2f}N {BAY[1]:.2f}E (grid point "
-          f"{float(p.latitude[iy]):.2f}N {float(p.longitude[ix]):.2f}E) and its 3x3 neighbourhood:")
+    print(f"\nBay of Bengal maximum cell {BAY[0]:.2f}N {BAY[1]:.2f}E and its 3x3 neighbourhood:")
     print(f"  {'window':8s} {'IST':48s} {'HRES pt':>8s} {'HRES 3x3':>12s} {'P>=50 pt':>9s} "
           f"{'P>=50 3x3':>11s} {'P>=100 pt':>10s} {'P>=100 3x3':>11s}")
     for s in (96, 108, 120, 132):
@@ -107,13 +136,6 @@ def main(hres_path, ens_path):
         print(f"  {s:3d}-{s+24:<4d} {window_label(base, s, s + 24):48s} {hres_pt} {hres_nb:>12s} "
               f"{p50[iy, ix]:9.0f} {p50[nb].min():5.0f}-{p50[nb].max():<5.0f} "
               f"{p100[iy, ix]:10.0f} {p100[nb].min():5.0f}-{p100[nb].max():<5.0f}")
-    bay = p.sel(latitude=slice(20, 8), longitude=slice(80, 95))
-    for t in (50, 100):
-        b = bay.sel(threshold=t)
-        k, yy, xx = np.unravel_index(int(b.values.argmax()), b.shape)
-        print(f"  Bay (8-20N, 80-95E) max P(>={t}) = {b.values.max():.0f} % at "
-              f"{float(b.latitude[yy]):.2f}N {float(b.longitude[xx]):.2f}E, window "
-              f"{int(b.start_h[k])}-{int(b.end_h[k])} h")
 
 
 if __name__ == "__main__":

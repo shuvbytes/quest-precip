@@ -143,8 +143,20 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   peaks at 0–24. **Window labels are correct.**
 - The band is actually mostly dry-ish in HRES: 437 of 625 cells < 5 mm, 124 at 5–10, 60 at 10–20, only 4 at 20–50
   (all at 90.5–91E, ENS P(≥10) 29–50 %). The ENS median P(≥10) by HRES bin: 5–10 mm 11 %, 10–20 mm 38 %.
-- **Root cause of the misreading: the check-map palette.** The YlGnBu 5–10 / 10–20 / 20–50 steps are similar blues.
-  M4 must use a palette with clearly distinguishable steps (use the dataviz skill; check adjacent-bin contrast).
+- Root cause of the misreading: the check-map palette. **Correction (measured later):** the old YlGnBu steps
+  were NOT too similar (adjacent OKLab dE 9–15). The real problem was lightness placement: the 5–10 mm bin was
+  already a mid-blue (L 0.76), so light rain read as heavy.
+- **Palette (`pipeline/palette.py`, used by M4):** one hue per layer, lightness monotone (dataviz skill).
+  Rain (blue) lightness per bin 0.91 → 0.30, so bins below 10 mm stay pale. Adjacent dE 5.7 and 6.8 for the two
+  palest pairs (an accepted trade-off; exact values are on click), 8.5–12.5 for the rest. Probability (magenta)
+  uses even steps, adjacent dE 12–16. Backgrounds: land #fafafa, sea #ffffff. The first attempt was invisible on
+  the old backgrounds (dE 2–3) and #f4f4f4 land also failed (6.8–7.3). `tests/test_palette.py` enforces:
+  monotone L, adjacent dE thresholds, palest step ≥ 8 vs both backgrounds. The web basemap in M5 must meet the same.
+- Like-for-like check (`m3_check.py`): HRES 10 mm contour drawn on the ENS P(≥10) panel; NE India figure compares
+  HRES ≥ 1 mm with ENS P(≥1). NE 20–30N 85–100E, 0–24 h: HRES ≥ 1 mm cells → median P(≥1) 88 %; HRES < 1 mm →
+  5.5 % (10–90 pct 0–39 %); match (HRES ≥ 1 vs P ≥ 50 %) 90.8 %. At 10 mm: 97.6 % match. The apparent NE mismatch
+  came from comparing a ≥ 1 mm colouring with a ≥ 10 mm probability. The ENS also spreads low probabilities
+  (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
 ## Status
