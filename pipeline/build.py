@@ -74,10 +74,78 @@ def render_frames(tp, p, packs, out: Path):
     return grid, three, w, frames
 
 
+ATTRIBUTION = ("© European Centre for Medium-Range Weather Forecasts (ECMWF). Source: ECMWF Open Data "
+               "(www.ecmwf.int). Licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). "
+               "Modified: cropped, de-accumulated, converted to mm, reprojected and coloured by this app; "
+               "ECMWF does not endorse it.")
+
+
+def _iso(t):
+    return t.strftime("%Y-%m-%dT%H:%MZ")
+
+
+def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, generated_utc=None):
+    import datetime as dt
+    import json
+    from process import UTC, ist_label, window_label
+
+    generated_utc = generated_utc or dt.datetime.now(UTC)
+
+    def add_times(f):
+        a = base + dt.timedelta(hours=f["start_h"])
+        b = base + dt.timedelta(hours=f["end_h"])
+        return {**f, "start_utc": _iso(a), "end_utc": _iso(b), "label_ist": window_label(base, f["start_h"], f["end_h"])}
+
+    ens_by_thr = {}
+    for f in frames["ens"]:
+        ens_by_thr.setdefault(f"{f['threshold_mm']:g}", []).append(add_times(f))
+
+    m = {
+        "schema": 1,
+        "run": {"utc": _iso(base), "ist": ist_label(base), "model": "ECMWF IFS (HRES + ENS), Open Data 0.25°"},
+        "generated_utc": _iso(generated_utc),
+        "time_note": "All times computed in UTC from the GRIB reference time; IST = UTC+05:30, used for labels only.",
+        "grid": {"lat_north": grid.lat_n, "lon_west": grid.lon_w, "dlat": grid.dlat, "dlon": grid.dlon,
+                 "nlat": grid.nlat, "nlon": grid.nlon,
+                 "value_meaning": "Model value at the nearest grid point (0.25°, ~25 km spacing). "
+                                  "Rain can vary a lot within that distance."},
+        "image": {"bounds": grid.bounds, "width": grid.width, "height": grid.height,
+                  "projection": "EPSG:3857 rows (for L.imageOverlay)", "resampling": "nearest grid point, no smoothing"},
+        "products": {
+            "hres_3h": {"title": "Rain in 3 hours (HRES, one model run)", "units": "mm",
+                        "source_units": tp_units, "bins": list(BINS_3H), "colours": RAIN,
+                        "over_colour_from": BINS_3H[-1],
+                        "below_floor": "not drawn (within GRIB packing noise, 2 × quantum)",
+                        "frames": [add_times(f) for f in frames["hres_3h"]]},
+            "hres_24h": {"title": "Rain in 24 hours (HRES, one model run)", "units": "mm",
+                         "source_units": tp_units, "bins": list(BINS_24H), "colours": RAIN,
+                         "over_colour_from": BINS_24H[-1],
+                         "definition": "TP(end) − TP(start); windows match the ENS probability windows",
+                         "below_floor": "not drawn (below the first legend edge or 2 × quantum)",
+                         "frames": [add_times(f) for f in frames["hres_24h"]]},
+            "ens_prob": {"title": "Chance of at least X mm in 24 hours (ENS ensemble)", "units": "%",
+                         "source_units": ens_units, "bins": list(PROB_BINS), "colours": PROB,
+                         "top_edge_inclusive": True,
+                         "definition": "GRIB probabilityType 3: probability that the 24 h total exceeds the "
+                                       "threshold; ECMWF names it 'at least X mm'",
+                         "thresholds_mm": [float(t) for t in ens_by_thr],
+                         "frames_by_threshold": ens_by_thr},
+        },
+        "source": {"provider": "ECMWF Open Data", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+                   "hres": "stream=oper type=fc param=tp, steps 0–144 h", "ens": "stream=enfo type=ep param=tpg*"},
+        "attribution": ATTRIBUTION,
+    }
+    path = out / "manifest.json"
+    path.write_text(json.dumps(m, indent=1, ensure_ascii=False))
+    return path, m
+
+
 def main(hres_path, ens_path, out=OUT_DEFAULT):
     out = Path(out)
     tp, p, base, packs = load(hres_path, ens_path)
     grid, three, w, frames = render_frames(tp, p, packs, out)
+    mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out)
+    print(f"wrote {mpath} ({mpath.stat().st_size / 1e3:.1f} kB)")
     print(f"Run {base:%Y-%m-%d %H:%M} UTC; grid {grid.nlat}x{grid.nlon}; image {grid.width}x{grid.height} px;"
           f" bounds {grid.bounds}")
     for name, fr in frames.items():
