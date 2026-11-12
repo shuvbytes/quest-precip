@@ -109,6 +109,43 @@ def classify(values, bins, lowest_drawn, n_colours):
     return out
 
 
+HATCH_INK = "#111111"
+HATCH_EDGE = "#ffffff"
+
+
+def hatch_codes(wetter, drier, grid: Grid):
+    """Pattern codes per output pixel: 0 transparent, 1 ink, 2 white edge.
+
+    wetter -> diagonal lines; drier -> dots. Ink with a white edge stays visible on
+    both the palest and darkest probability colours, and the shape (not colour) carries
+    the meaning.
+    """
+    rows, cols = grid.resample_index()
+    wet = np.asarray(wetter, bool)[np.ix_(rows, cols)]
+    dry = np.asarray(drier, bool)[np.ix_(rows, cols)]
+    r, c = np.meshgrid(np.arange(grid.height), np.arange(grid.width), indexing="ij")
+    out = np.zeros((grid.height, grid.width), np.uint8)
+    d = (r + c) % 6
+    out[wet & (d == 0)] = 1
+    out[wet & (d == 1)] = 2
+    rr, cc = r % 6, c % 6
+    core = (rr >= 2) & (rr <= 3) & (cc >= 2) & (cc <= 3)
+    ring = (rr >= 1) & (rr <= 4) & (cc >= 1) & (cc <= 4) & ~core
+    out[dry & ring] = 2
+    out[dry & core] = 1
+    return out
+
+
+def render_hatch(wetter, drier, grid: Grid, path: Path):
+    codes = hatch_codes(wetter, drier, grid)
+    img = Image.fromarray(codes, mode="P")
+    pal = [0, 0, 0] + [int(h[i:i + 2], 16) for h in (HATCH_INK, HATCH_EDGE) for i in (1, 3, 5)]
+    img.putpalette(pal + [0, 0, 0] * (256 - len(pal) // 3))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(path, optimize=True, transparency=0)
+    return path
+
+
 def render_png(field, grid: Grid, bins, colours, lowest_drawn, path: Path):
     """Write one frame as an indexed PNG with index 0 transparent."""
     assert field.shape == (grid.nlat, grid.nlon)

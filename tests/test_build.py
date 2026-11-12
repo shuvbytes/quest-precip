@@ -79,6 +79,23 @@ def test_points_roundtrip(built):
     assert m["points"]["bytes"] == h.size * 2 + e.size
 
 
+def test_disagreement_layer(built):
+    out, m = built
+    d = m["products"]["disagreement"]
+    assert d["default_on"] is True and d["rule"]["p_unlikely"] == 25 and d["rule"]["p_likely"] == 75
+    frames = [f for v in d["frames_by_threshold"].values() for f in v]
+    assert len(frames) == 77
+    for f in frames:
+        assert (f["file"] is None) == (f["n_wetter"] + f["n_drier"] == 0)
+        assert f["file"] is None or (out / f["file"]).exists()
+    if m["run"]["utc"] == "2026-11-12T00:00Z":
+        # The Bay case from M3: HRES 369 mm vs ENS P(>=100) ~22 % in 108-132 h -> "wetter"
+        g = m["grid"]
+        idx = round((g["lat_north"] - 15.0) / g["dlat"]) * g["nlon"] + round((86.5 - g["lon_west"]) / g["dlon"])
+        f = next(f for f in d["frames_by_threshold"]["100"] if f["start_h"] == 108)
+        assert idx in f["cells_wetter"]
+
+
 def _first_bin(m, f):
     P = m["products"]
     if f["file"].startswith("frames/hres3h"):

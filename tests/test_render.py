@@ -29,6 +29,19 @@ def test_every_pixel_samples_the_cell_it_is_drawn_in():
     assert set(rows) == set(range(g.nlat)) and set(cols) == set(range(g.nlon))
 
 
+def test_hatch_only_inside_flagged_cells():
+    from render import hatch_codes
+    g = Grid.from_coords(LAT, LON)
+    wet = np.zeros((g.nlat, g.nlon), bool); dry = np.zeros_like(wet)
+    wet[40, 50] = True; dry[100, 20] = True
+    codes = hatch_codes(wet, dry, g)
+    rows, cols = g.resample_index()
+    in_wet = (rows[:, None] == 40) & (cols[None, :] == 50)
+    in_dry = (rows[:, None] == 100) & (cols[None, :] == 20)
+    assert codes[~(in_wet | in_dry)].max() == 0          # nothing drawn outside flagged cells
+    assert (codes[in_wet] == 1).any() and (codes[in_dry] == 1).any()
+
+
 def test_classify_bins_floor_and_over():
     bins = [0.5, 1, 2, 5]
     v = np.array([np.nan, 0.0, 0.49, 0.5, 0.99, 1.0, 4.9, 5.0, 999])

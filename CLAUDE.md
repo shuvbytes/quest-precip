@@ -209,8 +209,21 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
 - **Open for M7:** GitHub Pages may not gzip `application/octet-stream`. Measure the real transfer with curl after
   deploy. If it is not compressed, ship `points.bin.gz` and decompress in the browser (DecompressionStream).
 
+## Disagreement layer (approved and built 12 Nov evening) — `pipeline/disagree.py`
+- Rule (user-approved): X = selected ENS threshold. **Wetter:** HRES ≥ X at the point and ENS P(≥X) < 25 % at the
+  point and all 8 neighbours. **Drier:** ENS P(≥X) ≥ 75 % at the point and HRES < X at the point and all 8
+  neighbours. At edges only the neighbours that exist are used. 25/75 chosen over 33/66; neighbourhood kept.
+- Map: 24 h mode only, over the ENS layer. **On by default, with a toggle.** Hatch PNGs: wetter = diagonal lines,
+  drier = dots, black with a white edge. One PNG per threshold/window with flags (74 of 77 this run).
+- Manifest `products.disagreement`: rule, legend text, point-panel text templates ({hres}, {pct}, {x}), and per
+  frame: counts + flat cell indices (row*nlon+col) so the point panel can show the right sentence. The manifest
+  is now 119 kB because of these lists.
+- This run: 2,489 wetter / 50 drier cells over 77 frames. Drier appears only at 1 and 5 mm. The Bay cell
+  (15.0N 86.5E) is flagged wetter at 100 mm, 108–132 h (test).
+- Visual note: the drier dots are small at full-region zoom; check readability in M5 when Leaflet scales the image.
+
 ## Next steps
-**Disagreement layer:** proposal given to the user 12 Nov evening; build only after approval.
+**M5 (13 Nov):** Leaflet front end, run locally with `python -m http.server` from `site_build/`.
 **(Done) M4 original spec, kept for reference:** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
 probabilities) using `palette.py` and the fixed legends, with per-frame floor flags; manifest.json (run time UTC,
 IST labels, windows, units, bins, floor_i, source, licence); point grid (uint16 0.1 mm + uint8 %); coastline

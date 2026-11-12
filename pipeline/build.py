@@ -17,7 +17,8 @@ from palette import PROB, RAIN
 from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, interval_floor,
                      lowest_visible, window_totals)
 from region import crop
-from render import Grid, render_png
+from disagree import LEGEND, P_LIKELY, P_UNLIKELY, POINT_TEXT, flags
+from render import Grid, render_hatch, render_png
 
 PROB_BINS = (2, 10, 25, 50, 75, 90, 100)
 HRES_MAX_H = 144
@@ -40,7 +41,7 @@ def load(hres_path, ens_path):
 def render_frames(tp, p, packs, out: Path):
     grid = Grid.from_coords(tp.latitude.values, tp.longitude.values)
     units = tp.attrs["units"]
-    frames = {"hres_3h": [], "hres_24h": [], "ens": []}
+    frames = {"hres_3h": [], "hres_24h": [], "ens": [], "disagree": []}
 
     def record(product, a, k, s, e, bins, colours, floor, extra=None):
         lowest, raised = lowest_visible(bins, floor)
@@ -71,6 +72,21 @@ def render_frames(tp, p, packs, out: Path):
             r = record("ens", pt.values[k], k, s, e, PROB_BINS, PROB, floor, extra=t)
             r.update(threshold_mm=float(t), max_pct=round(float(pt.values[k].max()), 1))
             frames["ens"].append(r)
+
+            # Disagreement for the same threshold and window (HRES 24 h from the same run)
+            kh = int(np.where(w.start_h == s)[0][0])
+            wet, dry = flags(w.mm.values[kh], pt.values[k], float(t))
+            name = f"disagree_p{t:g}_{s:03d}-{e:03d}.png"
+            if wet.any() or dry.any():
+                render_hatch(wet, dry, grid, out / "frames" / name)
+            frames["disagree"].append({
+                "file": f"frames/{name}" if (wet.any() or dry.any()) else None,
+                "threshold_mm": float(t), "start_h": s, "end_h": e,
+                "n_wetter": int(wet.sum()), "n_drier": int(dry.sum()),
+                # flat cell indices (row * nlon + col) so the point panel can say which applies
+                "cells_wetter": np.flatnonzero(wet).tolist(),
+                "cells_drier": np.flatnonzero(dry).tolist(),
+            })
     return grid, three, w, frames
 
 
@@ -138,6 +154,9 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
     ens_by_thr = {}
     for f in frames["ens"]:
         ens_by_thr.setdefault(f"{f['threshold_mm']:g}", []).append(add_times(f))
+    dis_by_thr = {}
+    for f in frames["disagree"]:
+        dis_by_thr.setdefault(f"{f['threshold_mm']:g}", []).append(add_times(f))
 
     m = {
         "schema": 1,
@@ -169,6 +188,22 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
                                        "threshold; ECMWF names it 'at least X mm'",
                          "thresholds_mm": [float(t) for t in ens_by_thr],
                          "frames_by_threshold": ens_by_thr},
+            "disagreement": {
+                "title": "Where the single detailed run and the ensemble disagree",
+                "shown_in": "24 h mode, over the ENS probability layer",
+                "default_on": True,
+                "rule": {
+                    "threshold": "X = the selected ENS threshold",
+                    "wetter": f"HRES >= X at the point and ENS P(>=X) < {P_UNLIKELY:g} % at the point and all 8 neighbours",
+                    "drier": f"ENS P(>=X) >= {P_LIKELY:g} % at the point and HRES < X at the point and all 8 neighbours",
+                    "p_unlikely": P_UNLIKELY, "p_likely": P_LIKELY, "neighbourhood": "3x3",
+                },
+                "pattern": {"wetter": "diagonal lines", "drier": "dots", "colours": "black with white edge"},
+                "legend": LEGEND,
+                "point_text": POINT_TEXT,
+                "cell_index": "row * nlon + col (row 0 = north)",
+                "frames_by_threshold": dis_by_thr,
+            },
         },
         "points": points,
         "source": {"provider": "ECMWF Open Data", "url": "https://www.ecmwf.int/en/forecasts/datasets/open-data",
@@ -190,7 +225,12 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
     print(f"wrote {ppath} ({ppath.stat().st_size:,} bytes)")
     print(f"Run {base:%Y-%m-%d %H:%M} UTC; grid {grid.nlat}x{grid.nlon}; image {grid.width}x{grid.height} px;"
           f" bounds {grid.bounds}")
+    dis = frames["disagree"]
+    print(f"  disagree : {sum(f['file'] is not None for f in dis)} hatch PNGs for {len(dis)} threshold/windows; "
+          f"wetter cells {sum(f['n_wetter'] for f in dis)}, drier cells {sum(f['n_drier'] for f in dis)}")
     for name, fr in frames.items():
+        if name == "disagree":
+            continue
         sizes = [(out / f["file"]).stat().st_size for f in fr]
         raised = [f["file"] for f in fr if f["floor_raised"]]
         print(f"  {name:9s}: {len(fr):3d} PNGs, {sum(sizes)/1e3:7.1f} kB total "
