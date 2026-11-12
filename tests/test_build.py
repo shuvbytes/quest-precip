@@ -85,15 +85,59 @@ def test_disagreement_layer(built):
     assert d["default_on"] is True and d["rule"]["p_unlikely"] == 25 and d["rule"]["p_likely"] == 75
     frames = [f for v in d["frames_by_threshold"].values() for f in v]
     assert len(frames) == 77
+    assert d["map_min_cluster"] == 3 and d["min_zoom_for_marks"] == 6
+    assert d["zoom_note"] == "Zoom in to see disagreement marks"
     for f in frames:
-        assert (f["file"] is None) == (f["n_wetter"] + f["n_drier"] == 0)
+        assert (f["file"] is None) == (f["n_wetter_on_map"] + f["n_drier_on_map"] == 0)
         assert f["file"] is None or (out / f["file"]).exists()
+        assert f["n_wetter"] == len(f["cells_wetter"]) >= f["n_wetter_on_map"]
+        assert f["n_drier"] == len(f["cells_drier"]) >= f["n_drier_on_map"]
     if m["run"]["utc"] == "2026-11-12T00:00Z":
         # The Bay case from M3: HRES 369 mm vs ENS P(>=100) ~22 % in 108-132 h -> "wetter"
         g = m["grid"]
         idx = round((g["lat_north"] - 15.0) / g["dlat"]) * g["nlon"] + round((86.5 - g["lon_west"]) / g["dlon"])
         f = next(f for f in d["frames_by_threshold"]["100"] if f["start_h"] == 108)
         assert idx in f["cells_wetter"]
+
+
+def _hatch_pixels_in_cell(out, f, g, idx):
+    """Non-transparent hatch pixels drawn inside grid cell idx (row * nlon + col)."""
+    import numpy as np
+    from PIL import Image
+    from render import Grid, hatch_grid
+    if f["file"] is None:
+        return 0
+    hg = hatch_grid(Grid(g["lat_north"], g["lon_west"], g["dlat"], g["dlon"], g["nlat"], g["nlon"]))
+    codes = np.asarray(Image.open(out / f["file"]))
+    rows, cols = hg.resample_index()
+    i, j = divmod(idx, g["nlon"])
+    return int((codes[np.ix_(rows == i, cols == j)] > 0).sum())
+
+
+def test_map_drops_small_clusters_but_point_panel_keeps_them(built):
+    """Isolated flags: listed for the point panel, not hatched on the map. Big clusters: both."""
+    import numpy as np
+    from disagree import keep_min_cluster
+    out, m = built
+    g, d = m["grid"], m["products"]["disagreement"]
+    checked = 0
+    for f in (f for v in d["frames_by_threshold"].values() for f in v):
+        for key in ("cells_wetter", "cells_drier"):
+            mask = np.zeros(g["nlat"] * g["nlon"], bool)
+            mask[f[key]] = True
+            mask = mask.reshape(g["nlat"], g["nlon"])
+            kept = keep_min_cluster(mask, d["map_min_cluster"])
+            dropped = np.flatnonzero(mask & ~kept)
+            if len(dropped) and f["file"]:
+                assert _hatch_pixels_in_cell(out, f, g, int(dropped[0])) == 0
+                checked += 1
+            if kept.any():
+                assert _hatch_pixels_in_cell(out, f, g, int(np.flatnonzero(kept)[0])) > 0
+    assert checked > 0
+    if m["run"]["utc"] == "2026-11-12T00:00Z":
+        idx = round((g["lat_north"] - 15.0) / g["dlat"]) * g["nlon"] + round((86.5 - g["lon_west"]) / g["dlon"])
+        f = next(f for f in d["frames_by_threshold"]["100"] if f["start_h"] == 108)
+        assert _hatch_pixels_in_cell(out, f, g, idx) > 0      # Bay point, 26-cell cluster: drawn
 
 
 def _first_bin(m, f):

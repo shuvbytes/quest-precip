@@ -40,6 +40,18 @@ def test_drier_needs_hres_dry_in_whole_neighbourhood():
     assert flags(h, p, 10)[1][2, 2]            # 75 counts as "likely"
 
 
+def test_keep_min_cluster_8_connected():
+    from disagree import keep_min_cluster
+    m = np.zeros((6, 6), bool)
+    m[0, 0] = True                         # isolated -> dropped
+    m[2, 2] = m[3, 3] = True               # 2 cells touching diagonally -> dropped at n = 3
+    m[5, 3] = m[5, 4] = m[4, 5] = True     # 3 cells, last one touching diagonally -> kept
+    k = keep_min_cluster(m, 3)
+    assert k.sum() == 3 and k[5, 3] and k[5, 4] and k[4, 5]
+    assert keep_min_cluster(m, 2).sum() == 5
+    assert (keep_min_cluster(m, 1) == m).all()
+
+
 RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 
 

@@ -17,7 +17,8 @@ from palette import PROB, RAIN
 from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, interval_floor,
                      lowest_visible, window_totals)
 from region import crop
-from disagree import LEGEND, P_LIKELY, P_UNLIKELY, POINT_TEXT, flags
+from disagree import (LEGEND, MAP_MIN_CLUSTER, MIN_ZOOM_FOR_MARKS, P_LIKELY, P_UNLIKELY, POINT_TEXT,
+                      ZOOM_NOTE, flags, keep_min_cluster)
 from render import Grid, render_hatch, render_png
 
 PROB_BINS = (2, 10, 25, 50, 75, 90, 100)
@@ -76,14 +77,18 @@ def render_frames(tp, p, packs, out: Path):
             # Disagreement for the same threshold and window (HRES 24 h from the same run)
             kh = int(np.where(w.start_h == s)[0][0])
             wet, dry = flags(w.mm.values[kh], pt.values[k], float(t))
+            # Map: only clusters of >= MAP_MIN_CLUSTER cells. Point panel: every flagged cell.
+            wet_map, dry_map = keep_min_cluster(wet), keep_min_cluster(dry)
             name = f"disagree_p{t:g}_{s:03d}-{e:03d}.png"
-            if wet.any() or dry.any():
-                render_hatch(wet, dry, grid, out / "frames" / name)
+            drawn = bool(wet_map.any() or dry_map.any())
+            if drawn:
+                render_hatch(wet_map, dry_map, grid, out / "frames" / name)
             frames["disagree"].append({
-                "file": f"frames/{name}" if (wet.any() or dry.any()) else None,
+                "file": f"frames/{name}" if drawn else None,
                 "threshold_mm": float(t), "start_h": s, "end_h": e,
                 "n_wetter": int(wet.sum()), "n_drier": int(dry.sum()),
-                # flat cell indices (row * nlon + col) so the point panel can say which applies
+                "n_wetter_on_map": int(wet_map.sum()), "n_drier_on_map": int(dry_map.sum()),
+                # ALL flagged cells (row * nlon + col), for the point panel sentence
                 "cells_wetter": np.flatnonzero(wet).tolist(),
                 "cells_drier": np.flatnonzero(dry).tolist(),
             })
@@ -198,6 +203,13 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
                     "drier": f"ENS P(>=X) >= {P_LIKELY:g} % at the point and HRES < X at the point and all 8 neighbours",
                     "p_unlikely": P_UNLIKELY, "p_likely": P_LIKELY, "neighbourhood": "3x3",
                 },
+                "map_min_cluster": MAP_MIN_CLUSTER,
+                "map_vs_point": (f"The map hatches only groups of at least {MAP_MIN_CLUSTER} touching flagged cells; "
+                                 "the point panel reports every flagged cell (cells_wetter / cells_drier)."),
+                "min_zoom_for_marks": MIN_ZOOM_FOR_MARKS,
+                "zoom_note": ZOOM_NOTE,
+                "initial_view": (f"Fit the region; if that needs a zoom below {MIN_ZOOM_FOR_MARKS} (small screens), "
+                                 "show zoom_note while the zoom is below min_zoom_for_marks."),
                 "pattern": {"wetter": "diagonal lines", "drier": "dots", "colours": "black with white edge"},
                 "legend": LEGEND,
                 "point_text": POINT_TEXT,
@@ -227,7 +239,9 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
           f" bounds {grid.bounds}")
     dis = frames["disagree"]
     print(f"  disagree : {sum(f['file'] is not None for f in dis)} hatch PNGs for {len(dis)} threshold/windows; "
-          f"wetter cells {sum(f['n_wetter'] for f in dis)}, drier cells {sum(f['n_drier'] for f in dis)}")
+          f"flagged (point panel) wetter {sum(f['n_wetter'] for f in dis)} / drier {sum(f['n_drier'] for f in dis)}; "
+          f"on map (clusters >= {MAP_MIN_CLUSTER}) wetter {sum(f['n_wetter_on_map'] for f in dis)} / "
+          f"drier {sum(f['n_drier_on_map'] for f in dis)}")
     for name, fr in frames.items():
         if name == "disagree":
             continue

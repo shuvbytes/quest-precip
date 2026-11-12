@@ -8,12 +8,11 @@ Usage: python pipeline/m4_disagree_stats.py <hres_tp file> <ens_tpg file>
 from __future__ import annotations
 
 import sys
-from collections import deque
 
 import numpy as np
 import xarray as xr
 
-from disagree import P_LIKELY, P_UNLIKELY, flags, neighbourhood_max
+from disagree import P_LIKELY, P_UNLIKELY, clusters, flags, keep_min_cluster, neighbourhood_max
 from ens import read_ens_probs
 from process import window_totals
 from region import LON_MIN, crop
@@ -21,34 +20,8 @@ from region import LON_MIN, crop
 BAY = (15.0, 86.5)
 
 
-def clusters(mask):
-    """Sizes of 8-connected clusters and a label array."""
-    lab = np.zeros(mask.shape, int)
-    sizes = []
-    for i, j in zip(*np.nonzero(mask)):
-        if lab[i, j]:
-            continue
-        sizes.append(0)
-        q = deque([(i, j)])
-        lab[i, j] = len(sizes)
-        while q:
-            a, b = q.popleft()
-            sizes[-1] += 1
-            for da in (-1, 0, 1):
-                for db in (-1, 0, 1):
-                    y, x = a + da, b + db
-                    if 0 <= y < mask.shape[0] and 0 <= x < mask.shape[1] and mask[y, x] and not lab[y, x]:
-                        lab[y, x] = len(sizes)
-                        q.append((y, x))
-    return np.array(sizes, int), lab
-
-
 def keep_min(mask, n):
-    sizes, lab = clusters(mask)
-    if n <= 1 or not len(sizes):
-        return mask
-    ok = np.concatenate([[False], sizes >= n])
-    return ok[lab]
+    return keep_min_cluster(mask, n)
 
 
 def main(hres_path, ens_path):
