@@ -25,12 +25,14 @@ from region import crop
 
 OUT = Path(__file__).resolve().parent.parent / "outputs" / "checks"
 BAY = (15.00, 86.50)   # 505 mm HRES 0-144 h maximum (M2)
-PROB_BINS = [2, 10, 25, 50, 75, 90, 100.01]
+PROB_BINS = [2, 10, 25, 50, 75, 90, 100]
 
 
-def panel(ax, field, bins, cmap_name, label, title):
+def panel(ax, field, bins, cmap_name, label, title, extend="neither"):
     cmap = ListedColormap(plt.get_cmap(cmap_name)(np.linspace(0.2, 1, len(bins) - 1)))
     cmap.set_under((1, 1, 1, 0))
+    # Values >= the last edge (e.g. exactly 100 %, or > 200 mm) take the top colour.
+    cmap.set_over(cmap(cmap.N - 1))
     ax.add_feature(cfeature.LAND, facecolor="#f2efe9")
     ax.add_feature(cfeature.OCEAN, facecolor="#e6eef5")
     m = ax.pcolormesh(field.longitude, field.latitude, field.values, cmap=cmap,
@@ -39,7 +41,8 @@ def panel(ax, field, bins, cmap_name, label, title):
     ax.plot(BAY[1], BAY[0], "kx", ms=7, transform=ccrs.PlateCarree())
     ax.set_extent([65, 100, 5, 38], crs=ccrs.PlateCarree())
     ax.gridlines(draw_labels=["left", "bottom"], lw=0.3, alpha=0.5)
-    plt.colorbar(m, ax=ax, orientation="horizontal", pad=0.06, shrink=0.85, label=label)
+    plt.colorbar(m, ax=ax, orientation="horizontal", pad=0.06, shrink=0.85, label=label,
+                 ticks=bins, format="%g", extend=extend)
     ax.set_title(title, fontsize=9)
 
 
@@ -63,8 +66,8 @@ def main(hres_path, ens_path):
     # --- side-by-side map, window 0-24 ---
     lab = window_label(base, 0, 24)
     fig, axs = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={"projection": ccrs.PlateCarree()})
-    panel(axs[0], w.mm.isel(window=0), list(BINS_24H) + [1000], "YlGnBu", "mm",
-          f"HRES (one run): 24 h total\n{lab}")
+    panel(axs[0], w.mm.isel(window=0), list(BINS_24H), "YlGnBu", "mm",
+          f"HRES (one run): 24 h total\n{lab}", extend="max")
     panel(axs[1], p.sel(threshold=10).isel(window=0), PROB_BINS, "PuRd", "%",
           f"ENS (ensemble): chance of ≥ 10 mm in 24 h\n{lab}")
     fig.suptitle(f"ECMWF IFS, run {base:%Y-%m-%d %H} UTC. x = Bay of Bengal 0–144 h maximum", fontsize=10)

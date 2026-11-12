@@ -134,6 +134,19 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   The ENS P(≥100) peak in the Bay is 42 % at 13.00N 84.75E in 84–108 h (earlier and further SW). This is the
   core story the 24 h mode should tell.
 
+## M3 follow-up: ENS/HRES window alignment (`pipeline/m3_window_check.py`)
+- Concern: central Bay (12–18N, 85–91E) looked like 20–50 mm in HRES but ENS P(≥10) < 10–25 %.
+- GRIB keys: ENS tpg10 message has dataDate 20261112, dataTime 0000, stepRange 0-24, validity 20261113 0000,
+  stream enfo / type ep. HRES step 24 has the same date, time and validity (stream oper, type fc). Same run, same window.
+- Correlation of ENS P(≥10) 0–24 h with HRES 24 h totals: 0–24 h Pearson 0.897 / Spearman 0.807 (best);
+  12–36 h 0.814 / 0.751; it falls steadily for later windows. The reverse check (HRES 0–24 vs each ENS window) also
+  peaks at 0–24. **Window labels are correct.**
+- The band is actually mostly dry-ish in HRES: 437 of 625 cells < 5 mm, 124 at 5–10, 60 at 10–20, only 4 at 20–50
+  (all at 90.5–91E, ENS P(≥10) 29–50 %). The ENS median P(≥10) by HRES bin: 5–10 mm 11 %, 10–20 mm 38 %.
+- **Root cause of the misreading: the check-map palette.** The YlGnBu 5–10 / 10–20 / 20–50 steps are similar blues.
+  M4 must use a palette with clearly distinguishable steps (use the dataviz skill; check adjacent-bin contrast).
+- Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
+
 ## Status
 M0, M1, M2, M3 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
 Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
