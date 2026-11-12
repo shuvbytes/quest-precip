@@ -236,7 +236,13 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   maxima often fall where the ensemble spreads its probability below 25 %.
 - Minimum cluster size (8-connected) — **proposed, awaiting approval, not applied:** wetter cells 2,489 → 1,861
   (min 2) → 1,551 (min 3); clusters 967 → 339 → 184 (sum of the table's cluster counts); drier 50 → 44 → 32. The
-  Bay point sits in a 26-cell cluster (it survives).
+  Bay point sits in a 26-cell cluster (it survives). **Still awaiting the user's choice (1 / 2 / 3).**
+- User review (12 Nov, late): wetter hatching sits only on the 10–25 % shade, never on the ≥ 25 % core, which is
+  consistent with the rule. **Decided: the web map starts at zoom 6** (dots faint at zoom 5). Optional polish: some
+  dots look slightly clipped at zoom 7 (likely non-integer scaling), so check in M5.
+- Generated outputs in git: checked 12 Nov. No frame/hatch PNG, points.bin, manifest or GRIB has ever been
+  committed (`git log --all`). The only image in history is the deliberate validation figure.
+  `.gitignore` covers `site_build/`, `data/raw/`, `outputs/`.
 
 ## Next steps
 **M5 (13 Nov):** Leaflet front end, run locally with `python -m http.server` from `site_build/`.
