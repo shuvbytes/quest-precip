@@ -159,13 +159,45 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status
-M0, M1, M2, M3 done (12 Nov). Run everything with `conda run -n quest-precip ...` or `conda activate quest-precip`.
-Fetch: `python pipeline/fetch.py` (23.5 MB global GRIB in git-ignored `data/raw/`).
-Inspect: `python pipeline/inspect_grib.py <file>`; packing proof: `python pipeline/packing.py <file>`;
-M2 check + maps: `python pipeline/m2_check.py <file>` → `outputs/checks/` (git-ignored). Tests: `python -m pytest`.
+## Status (end of 12 Nov session; user on a break, M4 NOT started)
+**M0–M3 done; 18 tests passing.** All open questions from the M2/M3 reviews are resolved:
+- ECMWF chart comparison: no bugs; 0.25° values are point samples (`docs/validation/`).
+- ENS window alignment verified (same run/window in GRIB keys; best correlation at 0–24 h).
+- NE India mismatch resolved: it came from comparing ≥ 1 mm colouring with P(≥ 10 mm). Like-for-like agreement
+  is 90.8 % (1 mm) and 97.6 % (10 mm).
+- **Palette decided (user, 12 Nov): keep as is.** Pale light rain matters more than equal steps, so the two
+  palest rain pairs (dE 5.7 / 6.8) are accepted. Do not change without asking.
+
+Commits so far:
+| Commit | What |
+|---|---|
+| `285fa45` | M0 skeleton, env, CLAUDE.md |
+| `2b4327b` | M1 fetch + GRIB metadata inspection |
+| `017f713` | Post-M1 decisions (FastAPI M7b, artifact Pages, sizes, IST windows) |
+| `0ed7133` | M2 de-accumulation, packing evidence, tests |
+| `f1bbebf` | M2 follow-up: differences vs ECMWF chart |
+| `550e37e` | cartopy dev-only env split |
+| `311ad66` | Per-interval display floor + fixed 3 h / 24 h legends |
+| `c065350` | Validation record (`docs/validation/`) |
+| `ca4803e` | M3 ENS probabilities (+ run-selection fix, latitude-flip fix) |
+| `509f9e1` | M3 window-alignment check, probability legend fix |
+| `603b812` | Measured palette; NE like-for-like checks |
+
+How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
+Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
+Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose_vs_chart.py`,
+`validation_figure.py`, `m3_check.py`, `m3_window_check.py` → `outputs/checks/` (git-ignored). Tests: `python -m pytest`.
 
 ## Next steps
-M4: render EPSG:3857 PNGs (3 h + 24 h HRES, ENS probabilities) with fixed legends and per-frame floor flags;
-manifest.json (run time UTC, IST labels, windows, units, bins, floor_i, source, licence); point grid
-(uint16 0.1 mm + uint8 %); coastline alignment check; report the real compressed transfer size.
+**M4 (next, when the user resumes; wait for the go-ahead):** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
+probabilities) using `palette.py` and the fixed legends, with per-frame floor flags; manifest.json (run time UTC,
+IST labels, windows, units, bins, floor_i, source, licence); point grid (uint16 0.1 mm + uint8 %); coastline
+alignment check; report the real compressed transfer size.
+
+## Remaining schedule (agreed 12 Nov)
+| Day (IST) | Work |
+|---|---|
+| 12 Nov evening (after break) | M4 |
+| 13 Nov | M5 Leaflet front end (locally), M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
+| 14 Nov | M7b FastAPI /point (HF Spaces, Render fallback); automation (GitHub Actions cron 2×/day, 00z/12z run selection); M8 polish ("last updated", README). Target: app finished by the night of 14 Nov |
+| 15 Nov | Buffer: fixes, IMD-day (08:30–08:30 IST) stretch goal. Hard stop at start + 72 h |
