@@ -82,3 +82,94 @@ def test_outside_area_is_none(data):
     assert pc.point_report(m, arrays, 40.0, 80.0, "10", 0) is None       # north of 38.125
     assert pc.point_report(m, arrays, 20.0, 101.0, "10", 0) is None      # east of 100.125
     assert pc.point_report(m, arrays, 38.1, 100.1, "10", 0) is not None  # inside the corner cell
+
+
+# ---------- the FastAPI app (api/app.py), on local files ----------
+
+@pytest.fixture()
+def client(built, monkeypatch, tmp_path):
+    """TestClient on a copy of the built data folder (so a test can change the manifest)."""
+    import shutil
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    import app as api
+    out, _ = built
+    d = tmp_path / "data"
+    d.mkdir()
+    for f in ("manifest.json", "points.bin"):
+        shutil.copy(out / f, d / f)
+    monkeypatch.setattr(api, "DATA_DIR", str(d))
+    monkeypatch.setattr(api, "store", api.Store())
+    api.store.refresh()
+    assert api.store.data, api.store.last_error
+    with TestClient(api.app) as c:
+        c.data_dir = d
+        yield c
+
+
+@pytest.mark.parametrize("place", PLACES)
+def test_api_point_matches_points_bin(client, data, place):
+    m, _, ref = data
+    lat, lon, glat, glon = PLACES[place]
+    r = client.get("/point", params={"lat": lat, "lon": lon, "x": 100, "t": 60})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    g = m["grid"]
+    row, col = round((g["lat_north"] - glat) / g["dlat"]), round((glon - g["lon_west"]) / g["dlon"])
+    assert (j["grid_point"]["lat"], j["grid_point"]["lon"]) == (glat, glon)
+    assert [e["mm"] for e in j["hres_3h"]] == [round(float(v), 1) for v in ref["hres_3h"][:, row, col]]
+    assert [e["mm"] for e in j["hres_24h"]] == [round(float(v), 1) for v in ref["hres_24h"][:, row, col]]
+    assert [e["pct"] for e in j["ens_chance"]["100"]] == [int(v) for v in ref["ens_prob"][-1, :, row, col]]
+    assert j["run"]["utc"] == m["run"]["utc"] and j["run"]["generated_utc"] == m["generated_utc"]
+    assert j["summary"]["start_h"] == 60 and j["summary"]["threshold_mm"] == 100
+    assert "CC BY 4.0" in j["source"]["attribution"]
+
+
+def test_api_health(client, built):
+    r = client.get("/health")
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    assert r.json()["run_utc"] == built[1]["run"]["utc"]
+
+
+@pytest.mark.parametrize("params, says", [
+    ({}, "lat: Field required"),
+    ({"lat": "abc", "lon": 80}, "lat: Input should be a valid number"),
+    ({"lat": 95, "lon": 80}, "lat: Input should be less than or equal to 90"),
+    ({"lat": 13, "lon": -200}, "lon: Input should be greater than or equal to -180"),
+    ({"lat": "nan", "lon": 80}, "lat: Input should be a finite number"),
+    ({"lat": 13, "lon": 80, "x": 7}, "x must be one of 1, 5, 10, 20, 25, 50, 100"),
+    ({"lat": 13, "lon": 80, "t": 5}, "t must be one of 0, 12, 24"),
+])
+def test_api_rejects_bad_input_with_a_clear_message(client, params, says):
+    r = client.get("/point", params=params)
+    assert r.status_code == 422 and r.json()["error"] == "invalid_request"
+    assert says in r.json()["message"], r.json()["message"]
+
+
+def test_api_outside_area_says_so(client):
+    r = client.get("/point", params={"lat": 51.5, "lon": -0.1})
+    assert r.status_code == 404 and r.json()["error"] == "outside_forecast_area"
+    assert r.json()["message"] == ("No forecast here: (51.50, -0.10) is outside the forecast area, "
+                                   "5–38°N, 65–100°E.")
+
+
+def test_api_cors_only_for_the_site(client):
+    ok = client.get("/point", params={"lat": 13, "lon": 80}, headers={"Origin": "https://shuvbytes.github.io"})
+    assert ok.headers.get("access-control-allow-origin") == "https://shuvbytes.github.io"
+    other = client.get("/point", params={"lat": 13, "lon": 80}, headers={"Origin": "https://example.com"})
+    assert "access-control-allow-origin" not in other.headers
+    pre = client.options("/point", headers={"Origin": "https://example.com", "Access-Control-Request-Method": "GET"})
+    assert pre.status_code == 400
+
+
+def test_api_reloads_when_a_new_build_appears(client):
+    """A changed generated_utc in the manifest -> the next check loads it (as after a new run is deployed)."""
+    import json
+    import app as api
+    f = client.data_dir / "manifest.json"
+    m = json.loads(f.read_text())
+    m["generated_utc"], m["run"]["utc"] = "2099-01-01T00:00Z", "2099-01-01T00:00Z"
+    f.write_text(json.dumps(m))
+    api.store.last_check = 0                           # pretend the last check is old
+    client.get("/health")                              # schedules the refresh (runs after the response)
+    assert client.get("/health").json()["run_utc"] == "2099-01-01T00:00Z"

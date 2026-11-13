@@ -10,6 +10,9 @@ dependencies:
   - numpy
   - matplotlib       # renders the map PNGs
   - pytest
+  - fastapi          # point API (api/); tested in CI, deployed separately on Hugging Face
+  - uvicorn
+  - httpx            # API data download + FastAPI's TestClient
   - pip
   - pip:
       - ecmwf-opendata   # official ECMWF Open Data download client
