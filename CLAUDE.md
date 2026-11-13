@@ -262,6 +262,17 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   committed (`git log --all`). The only image in history is the deliberate validation figure.
   `.gitignore` covers `site_build/`, `data/raw/`, `outputs/`.
 
+## Robustness check on a second run (13 Nov, 05:54 UTC)
+- `fetch.py` chose **2026-11-12 12z** (= Thu 12 Nov 17:30 IST). The 13 Nov 00z run was not yet published (not even
+  HRES step 90 at 05:54 UTC), so this is correct. The whole pipeline ran unchanged: 48 + 11 + 77 frames, 66 hatch PNGs,
+  manifest 122.0 kB, points.bin 3,244,269 B. **No raised floors** (3 h 0.061–0.488, 24 h 0.244–0.488, ENS 0.062–1.0).
+  Disagreement: 2,348 wetter / 59 drier flagged; on map (≥ 3 clusters) 1,517 / 38. **36/36 tests pass**; the
+  real-data tests use the newest file (12z), and the run-specific checks stay pinned to the 00z files kept in `data/raw/`.
+- 24 h windows are 17:30 → 17:30 IST for a 12z run (labels correct). 24 h max 475.1 mm at 11.50N 85.00E, 60–84 h
+  (neighbours 176–345 mm; 3 h sum = 24 h exactly; ENS P(≥100) 30 %). The Bay system comes earlier and further SW
+  than in the 00z run. Plausible, not a bug.
+- `site_build/data/` now holds the 12z build.
+
 ## Next steps
 **M5 — 13 Nov morning, wait for the user's go-ahead.** Leaflet front end (static, no build step), run locally
 with `python -m http.server` from `site_build/` after `python pipeline/build.py ...`. Requirements gathered so far
