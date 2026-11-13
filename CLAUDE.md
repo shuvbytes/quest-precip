@@ -317,6 +317,10 @@ Changes after the user's review (13 Nov):
   cross-origin script throwing during load. Fix: the banner appears only for errors from this site's own scripts before
   ready, or when main() fails; others are logged ("[other origin]" in data-lasterror); any banner is removed on ready.
   Verified: cross-origin error → no banner, map ready; missing manifest → banner "data/manifest.json: HTTP 404".
+- **Confirmed by the user in Safari (13 Nov), after emptying caches:** cream land, white sea, no banner; the Bay URL
+  `#mode=24h&fill=chance&x=100&t=60` opens with "Sun 15 Nov 05:30 IST → Mon 16 Nov 05:30 IST". Private-window check
+  (does the "Ignored an error…" warning disappear, i.e. was it an extension?) **not yet reported**, so the original
+  source of "Script error." (extension vs stale cache) is unconfirmed. The fix covers both.
 - **Cache busting**: `build.copy_web` rewrites index.html links to `app.js?v=<sha256[:10]>` (also style.css, vendored
   Leaflet), so changed files always get new URLs; tested in `test_built_index_links_are_cache_busted`.
 Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/
