@@ -161,8 +161,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (14 Nov, ~01:40 IST): M0–M7b done; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
-**M0–M7b done; 67 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
+## Status (14 Nov, ~02:15 IST): M0–M7b done; live run 2026-11-13 12z; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
+**M0–M7b done; 75 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
 **Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
 slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
 both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check (Android Chrome): portrait OK; landscape poor → M8 item D. Earlier (evening): M6 closed by the user after confirming
@@ -217,8 +217,11 @@ Commits so far:
 | `04cf9d9` … `cf35771` | M7: .gitignore audit, `fetch.py --print-latest`, workflow, progress-bar fix, skip-step fix, M7 notes |
 | `7444592` … `1afe683` | M7b: pointcore (shared logic), FastAPI app + tests, page asks API first with fallback + source line |
 | `5e96c69`, `8a7db0a` | HF dropped (Docker SDK now paid); Render free web service, native Python, gzip |
-| `35e488a` | API follows a new site build at once (`/health?check=1`, 60 s checks, deploy loop) |
-| this commit | M7b live checks + cold start recorded |
+| `35e488a` | API follows a new site build at once (60 s checks, deploy loop; first via public `/health?check=1`) |
+| `5ffd6ca` | M7b live checks + cold start recorded |
+| `a96b624` | Reload trigger protected: token-only `POST /refresh` replaces public `/health?check=1` |
+| `487d7ee` | Floor test checks the rule (13 Nov 12z raised floors); chart note for mixed floors |
+| this commit | CLAUDE.md: refresh token, first 12z deploy |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -479,7 +482,7 @@ visible; header scrolled away; region does not fit). Build after A and B:
   fields exact; the dry central-India capture always snapshotted mid-download (test timing, not an app error).
 
 ## M7b — point API on Render (13–14 Nov) — `api/`
-- **Live: https://quest-precip-api.onrender.com** (`/point?lat=&lon=[&x=][&t=]`, `/health[?check=1]`, `/docs`, `/` → `/docs`).
+- **Live: https://quest-precip-api.onrender.com** (`/point?lat=&lon=[&x=][&t=]`, `/health`, `/docs`, `/` → `/docs`; `POST /refresh` token-only, not in /docs).
   Render free web service, native Python runtime (no Docker), region Singapore, created by the user in the form:
   root `api`, build `pip install -r requirements.txt`, start `uvicorn app:app --host 0.0.0.0 --port $PORT`, health check
   `/health`, env `PYTHON_VERSION=3.11.18` (= tested env; Render's default is 3.14), Auto-Deploy on commit, build filter `api/**`.
@@ -499,8 +502,25 @@ visible; header scrolled away; region does not fit). Build after A and B:
   points.bin; the panel shows "Values from: forecast API (Render) · answered in N ms" or "in-browser lookup (points.bin) ·
   <reason>". Pings `/health` on load to start waking a sleeping service. `?api=off` forces the local path.
 - **Sync bug found live and fixed (`35e488a`):** after a Pages redeploy the site had build 19:45Z, the API 14:32Z (the deploy
-  nudge came < 5 min after the API's last check) → the page correctly fell back. Now 60 s checks, `/health?check=1` checks
-  at once (≥ 15 s apart), and the deploy job calls it until the API reports the deployed build.
+  nudge came < 5 min after the API's last check) → the page correctly fell back. Now the API checks every 60 s, and the
+  deploy job asks it to check at once, repeating until the API reports the deployed build.
+- **Reload trigger protected (user request, `a96b624`):** the first version used a public `GET /health?check=1` (anyone could
+  make the API re-read the fixed site URL, ≤ every 15 s: low risk, but unauthenticated work on demand). Now `/health` is
+  read-only and the trigger is **`POST /refresh` with `Authorization: Bearer <token>`**: compared in constant time with Render
+  env `REFRESH_TOKEN` (≥ 32 chars, else disabled → 503), wrong/missing → 401 + `WWW-Authenticate: Bearer`, ≤ every 15 s,
+  hidden from /docs, GET → 405. Caller: deploy.yml step with GitHub secret `API_REFRESH_TOKEN` (masked `***`); without the
+  secret the step is skipped and the 60 s self-check applies. **Token created by the user in their own terminal**
+  (`openssl rand -hex 32 | tee >(pbcopy) | gh secret set API_REFRESH_TOKEN …`, then pasted into Render's Environment,
+  clipboard cleared): never shown in this session. 7 tests. Checked live 13 Nov: no/wrong token → 401; deploy run
+  43503111192: "try 1: API has build 2026-11-13T20:37Z, site has 2026-11-13T20:37Z"; run log has no token-like string
+  (the only 64-hex strings are cache keys and the artifact digest in the build job).
+- **First 12z deploy (13 Nov 20:37 UTC) and a blocked deploy before it:** run 43501967135 failed (live site unchanged, as
+  designed) on `test_real_run_floors_below_legend`: in the 13 Nov 12z run ECMWF packs the accumulation from +105 h with
+  E = −11 (quantum 0.488 mm; totals beyond ~1 m in the Bay system, 3 h max 260 mm at 14.5N 84.75E), so 13 of 48 3 h frames
+  have floor 0.977 mm > 0.5 mm. The 12 Nov rule handles it (frame starts at 1 mm, `floor_raised`, legend note, panel
+  "< 1 mm"); the test wrongly asserted it never happens → replaced by `test_real_run_floor_rule` (the rule, for every
+  downloaded run). Also fixed: the chart's "No 3-hour window reaches X mm" named only the first frame's floor; with mixed
+  floors it names both. Live after the fix: 695/695 via the API on the 12z build.
 - **Checks (13 Nov, live):** curl: 3 places, 404/422 messages, gzip, CORS (site origin gets the header; other origins none;
   foreign preflight 400), `/docs` loads. API vs live points.bin: **561/561** values + texts (Chennai, Bay, dry). Live page in
   real-clock headless Chrome (DevTools protocol; simulated-clock headless proved unreliable for timeouts and downloads):
