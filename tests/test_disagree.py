@@ -75,3 +75,15 @@ def test_real_run_counts_match_proposal():
         wet, dry = flags(w.mm.values[k], p.values[kp], 10)
         got.append((int(wet.sum()), int(dry.sum())))
     assert got == [(33, 0), (26, 0), (165, 0)]
+
+
+def test_wetter_sentence_says_heavy_only_from_50_mm():
+    """User, 13 Nov: below 50 mm the wetter sentence names the threshold; from 50 mm it says "Heavy rain"."""
+    from disagree import HEAVY_FROM_MM, POINT_TEXT, point_text_key
+    assert HEAVY_FROM_MM == 50
+    for x in (1, 5, 10, 20, 25):
+        t = POINT_TEXT[point_text_key("wetter", x)].replace("{x}", str(x))
+        assert t.endswith(f"Rain of {x} mm or more is possible here, but not likely.") and "Heavy" not in t
+    for x in (50, 100):
+        assert POINT_TEXT[point_text_key("wetter", x)].endswith("Heavy rain is possible, not likely.")
+    assert point_text_key("drier", 100) == point_text_key("drier", 1) == "drier"

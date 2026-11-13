@@ -162,7 +162,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
 ## Status (13 Nov, evening IST): M0–M6 done; M7 next
-**M0–M6 done; 41 tests passing; pushed to GitHub (13 Nov evening).** M6 closed by the user after confirming
+**M0–M6 done; 42 tests passing; pushed to GitHub (13 Nov evening).** M6 closed by the user after confirming
 both keyboard fixes in Safari (the ring lands on the crosshair). Earlier (afternoon): M0–M5 done. The map page runs locally and was checked by the user in Safari (all five check
 views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
 **https://github.com/shuvbytes/quest-precip** (private, branch `main`). Pages not enabled yet (M7).
@@ -399,9 +399,13 @@ User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`,
   Sri Lanka S tip, southern Bay, Jaffna, Gilgit, Port Blair, Karachi reached by keyboard only: 28/28 exact grid points.
 - Table key line under the 24 h table was cut off at the left (a <caption> inside the sideways-scrolling box): now a
   visually hidden caption for screen readers + a visible line below the box.
-- **Open wording issue (needs the user's decision):** the approved "wetter" sentence ends "Heavy rain is possible,
-  not likely." At low thresholds this misleads (e.g. 1.5 mm at X = 1 mm). Proposal: "Rain of X mm or more is
-  possible here, but not likely." (and for drier: unchanged). Not changed without approval.
+- **Wetter sentence wording (decided by the user, 13 Nov):** for X < 50 mm it ends "Rain of X mm or more is possible here, but
+  not likely."; "Heavy rain is possible, not likely." is used only when X >= 50 mm (`disagree.HEAVY_FROM_MM`,
+  `point_text_key`; manifest `point_text.wetter_heavy` + `heavy_from_mm`). The old ending misled at low thresholds
+  (1.5 mm at X = 1 mm). Drier sentence unchanged. Test `test_wetter_sentence_says_heavy_only_from_50_mm`; m6_check
+  697/697 (isolated flag at X = 1 shows the new ending, Bay cell at X = 100 the heavy one).
+- **Keyboard edges confirmed by the user in Safari (13 Nov):** the crosshair reaches the bottom dashed edge (~5°N,
+  Sri Lanka) and the ring lands on the crosshair.
 
 ## M8 idea (user, 13 Nov) — record only, build in M8 after deployment
 Compact **point card** anchored next to the selected point on the map: grid point + window, the main number, a chance

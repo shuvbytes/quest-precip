@@ -71,10 +71,22 @@ LEGEND = {
     "drier": "The single detailed run (HRES) is much drier than the ensemble here",
 }
 # Point-panel text; the front end fills {hres}, {pct}, {x} from points.bin for the clicked cell.
+HEAVY_FROM_MM = 50   # user, 13 Nov: "Heavy rain is possible, not likely." only when X >= 50 mm
+
+
+def point_text_key(kind: str, x_mm: float) -> str:
+    """Which POINT_TEXT template the point panel uses for a flagged cell at threshold x_mm."""
+    return "wetter_heavy" if kind == "wetter" and x_mm >= HEAVY_FROM_MM else kind
+
+
 POINT_TEXT = {
     "wetter": ("The models disagree here. The single detailed run gives {hres} mm in this window, but the "
                "ensemble gives only a {pct} % chance of at least {x} mm here and nearby. "
-               "Heavy rain is possible, not likely."),
+               "Rain of {x} mm or more is possible here, but not likely."),
+    # same sentence for thresholds that are heavy rain (X >= HEAVY_FROM_MM); "heavy" would mislead at 1-25 mm
+    "wetter_heavy": ("The models disagree here. The single detailed run gives {hres} mm in this window, but the "
+                     "ensemble gives only a {pct} % chance of at least {x} mm here and nearby. "
+                     "Heavy rain is possible, not likely."),
     "drier": ("The models disagree here. The ensemble gives a {pct} % chance of at least {x} mm, but the "
               "single detailed run has less than {x} mm here and nearby. "
               "Rain is likely even though this one run misses it."),

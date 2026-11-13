@@ -20,7 +20,7 @@ import xarray as xr
 
 import m5_screens as s
 from build import read_points
-from disagree import keep_min_cluster
+from disagree import keep_min_cluster, point_text_key
 from process import deaccumulate, window_totals
 from region import crop
 
@@ -95,7 +95,7 @@ def expected(m, pts, row, col, state):
     exp["sum-ens"] = f"Chance of ≥ {x} mm (ENS): {fmt_pct(ens[kx, k, row, col], P['ens_prob']['frames_by_threshold'][x][k]['lowest_drawn'])}"
     fl = flag(x, k)
     if fl:
-        exp["disagree"] = (D["point_text"][fl[0]].replace("{hres}", f"{h24[k, row, col]:.1f}")
+        exp["disagree"] = (D["point_text"][point_text_key(fl[0], float(x))].replace("{hres}", f"{h24[k, row, col]:.1f}")
                            .replace("{pct}", str(int(np.floor(ens[kx, k, row, col] + 0.5)))).replace("{x}", x))
     return exp, k, kx, fl
 

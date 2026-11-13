@@ -646,7 +646,9 @@ function renderPointContent(app) {
     // 2. disagreement sentence for this cell, threshold and window (also isolated cells not hatched on the map)
     const flag = cellFlag(m, x, k, idx);
     if (flag) {
-      const txt = Pr.disagreement.point_text[flag.kind]
+      // wetter at X >= heavy_from_mm (50) says "Heavy rain is possible"; below that it names X (user, 13 Nov)
+      const key = flag.kind === "wetter" && Number(x) >= Pr.disagreement.heavy_from_mm ? "wetter_heavy" : flag.kind;
+      const txt = Pr.disagreement.point_text[key]
         .replaceAll("{hres}", val("hres_24h", [k]).toFixed(1))
         .replaceAll("{pct}", `${Math.round(pct)}`)
         .replaceAll("{x}", fmt(x));

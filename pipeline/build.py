@@ -18,7 +18,7 @@ from region import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
 from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, interval_floor,
                      lowest_visible, window_totals)
 from region import crop
-from disagree import (LEGEND, MAP_MIN_CLUSTER, MIN_ZOOM_FOR_MARKS, P_LIKELY, P_UNLIKELY, POINT_TEXT,
+from disagree import (HEAVY_FROM_MM, LEGEND, MAP_MIN_CLUSTER, MIN_ZOOM_FOR_MARKS, P_LIKELY, P_UNLIKELY, POINT_TEXT,
                       ZOOM_NOTE, flags, keep_min_cluster)
 from render import Grid, render_hatch, render_png
 
@@ -233,6 +233,7 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
                 "pattern": {"wetter": "diagonal lines", "drier": "dots", "colours": "black with white edge"},
                 "legend": LEGEND,
                 "point_text": POINT_TEXT,
+                "heavy_from_mm": HEAVY_FROM_MM,
                 "cell_index": "row * nlon + col (row 0 = north)",
                 "frames_by_threshold": dis_by_thr,
             },
