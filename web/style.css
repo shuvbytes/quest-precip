@@ -81,3 +81,20 @@ body {
   border: 1px solid #e8cf86; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; font-weight: 600;
   box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .zoom-note[hidden] { display: none; }
+
+/* ---------- Header status, legend, footer ---------- */
+.stale { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+  background: var(--amber-bg); color: var(--amber-ink); border: 1px solid #e8cf86; font-weight: 600; }
+.legend { margin-top: 16px; }
+.legend h3 { margin: 0 0 6px; font-size: 0.86rem; font-weight: 650; }
+.legend .units { font-weight: 400; color: var(--ink-3); }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; }
+.legend li { display: flex; align-items: center; gap: 7px; font-size: 0.8rem; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.sw { width: 22px; height: 14px; flex: none; border-radius: 2px; border: 1px solid rgba(0,0,0,0.12); }
+.legend .note { margin: 7px 0 0; font-size: 0.76rem; color: var(--ink-3); line-height: 1.35; }
+.legend .note.warn { color: var(--amber-ink); }
+.legend .hatch-key { margin-top: 12px; }
+.legend .hatch-key li { grid-column: 1 / -1; align-items: flex-start; }
+.sw-wet { background: repeating-linear-gradient(135deg, #111 0 2px, #fff 2px 3px, transparent 3px 6px), #e9b9d3; }
+.sw-dry { background: radial-gradient(circle, #111 0 3px, #fff 3px 4.5px, transparent 4.5px), #b73589; }

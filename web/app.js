@@ -104,6 +104,131 @@ function showingText(m) {
   return P.ens_prob.title.replace(" X ", ` ${xLabel(state.x)} `);
 }
 
+/* ---------------- times (never use the viewer's time zone: shift UTC by +05:30 and format as UTC) ---------------- */
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad = (n) => String(n).padStart(2, "0");
+
+function parseUTC(iso) {            // "2026-11-12T12:00Z"
+  const t = Date.parse(iso);
+  if (isNaN(t)) throw new Error("bad time in manifest: " + iso);
+  return t;
+}
+function istLabel(ms) {
+  const d = new Date(ms + 330 * 60 * 1000);
+  return `${DAYS[d.getUTCDay()]} ${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} IST`;
+}
+function ago(ms) {
+  const h = (Date.now() - ms) / 3.6e6;
+  return h < 1 ? "less than an hour ago" : h < 48 ? `${Math.round(h)} h ago` : `${Math.round(h / 24)} days ago`;
+}
+
+function renderHeader(m) {
+  const run = parseUTC(m.run.utc);
+  const runAgeH = (Date.now() - run) / 3.6e6;
+  const runLine = $("run-line");
+  runLine.textContent = `Forecast run: ${m.run.ist} (${m.run.utc.slice(11, 16)} UTC, ${m.run.utc.slice(0, 10)}) · issued ${ago(run)}`;
+  // Amber when the run is more than 30 h old (user, 13 Nov): a 12z run is routinely ~19 h old before the
+  // next 00z is published, so a lower threshold would warn in normal operation.
+  if (runAgeH > 30) {
+    const b = document.createElement("span");
+    b.className = "stale";
+    b.textContent = "Older than usual: newer runs may exist";
+    runLine.appendChild(b);
+  }
+  const gen = parseUTC(m.generated_utc);
+  $("updated-line").textContent = `Last updated: ${istLabel(gen)} (${ago(gen)})`;
+}
+
+/* ---------------- legend & footer (bins, colours, units, notes all from the manifest) ---------------- */
+
+function fmt(v) { return Number(v).toString(); }
+
+function legendList(bins, colours, units, topInclusive) {
+  const ul = document.createElement("ul");
+  colours.forEach((c, i) => {
+    let text;
+    if (i < bins.length - 1) text = `${fmt(bins[i])}–${fmt(bins[i + 1])}`;
+    else text = `≥ ${fmt(bins[bins.length - 1])}`;           // over-range colour (rain)
+    if (topInclusive && i === bins.length - 2) text = `${fmt(bins[i])}–${fmt(bins[i + 1])}`;
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="sw" style="background:${c}"></span><span></span>`;
+    li.lastChild.textContent = `${text} ${units}`;
+    ul.appendChild(li);
+  });
+  return ul;
+}
+
+function renderLegend(m, f) {
+  const P = m.products;
+  const box = $("legend");
+  box.innerHTML = "";
+  let prod, title;
+  if (state.mode === "3h") { prod = P.hres_3h; title = "Rain in the 3-hour window"; }
+  else if (state.fill === "rain") { prod = P.hres_24h; title = "Rain in the 24-hour window"; }
+  else { prod = P.ens_prob; title = `Chance of ≥ ${fmt(state.x)} mm in the 24-hour window`; }
+
+  const h = document.createElement("h3");
+  h.innerHTML = `<span></span> <span class="units"></span>`;
+  h.firstChild.textContent = title;
+  h.lastChild.textContent = `(${prod.units})`;
+  box.appendChild(h);
+  box.appendChild(legendList(prod.bins, prod.colours, prod.units, !!prod.top_edge_inclusive));
+
+  const note = document.createElement("p");
+  note.className = "note";
+  const what = prod.units === "%" ? "Chances" : "Amounts";
+  note.textContent = `${what} below ${fmt(f.lowest_drawn)} ${prod.units} are not shown.` +
+    (prod.units === "mm" ? " Below that, values are within the data's storage precision or too light to matter." : "");
+  box.appendChild(note);
+  if (f.floor_raised) {
+    const w = document.createElement("p");
+    w.className = "note warn";
+    w.textContent = `In this window the data is stored more coarsely, so the map starts at ${fmt(f.lowest_drawn)} ${prod.units} instead of ${fmt(prod.bins[0])}.`;
+    box.appendChild(w);
+  }
+  const pt = document.createElement("p");
+  pt.className = "note";
+  pt.textContent = m.grid.value_meaning;
+  box.appendChild(pt);
+
+  if (state.mode === "24h" && state.hatch) {
+    const D = P.disagreement;
+    const k = document.createElement("div");
+    k.className = "hatch-key";
+    k.innerHTML = `<h3>Where the models disagree (≥ ${fmt(state.x)} mm)</h3><ul>
+      <li><span class="sw sw-wet"></span><span></span></li>
+      <li><span class="sw sw-dry"></span><span></span></li></ul>
+      <p class="note"></p>`;
+    const spans = k.querySelectorAll("li > span:last-child");
+    spans[0].textContent = D.legend.wetter;
+    spans[1].textContent = D.legend.drier;
+    k.querySelector(".note").textContent =
+      `Wetter: the detailed run gives ≥ X mm, but the ensemble's chance is under ${D.rule.p_unlikely} % here and at all neighbouring points. ` +
+      `Drier: the ensemble's chance is ${D.rule.p_likely} % or more, but the detailed run is below X here and nearby. ` +
+      `Only groups of ${D.map_min_cluster} or more touching grid points are marked.`;
+    box.appendChild(k);
+  }
+}
+
+function renderFooter(m) {
+  const foot = $("foot");
+  foot.innerHTML = "";
+  const p1 = document.createElement("p");
+  p1.style.margin = "0";
+  p1.textContent = m.attribution + " ";
+  const a = document.createElement("a");
+  a.href = m.source.url; a.textContent = "About ECMWF Open Data"; a.rel = "noopener";
+  p1.appendChild(a);
+  const p2 = document.createElement("p");
+  p2.style.margin = "2px 0 0";
+  p2.innerHTML = `India boundary: <a href="https://github.com/datameet/maps/blob/master/Country/india-composite.geojson" rel="noopener">India boundaries</a>
+    by <a href="http://datameet.org/" rel="noopener">DataMeet India community</a> (CC-0 per the dataset's README), drawn as per the Survey of India official boundary.
+    Land and coastline: Natural Earth (public domain). No third-party map tiles.`;
+  foot.append(p1, p2);
+}
+
 /* ---------------- render ---------------- */
 
 function render(app) {
@@ -148,6 +273,8 @@ function render(app) {
   const s = document.createElement("span");
   s.textContent = "Showing: " + showingText(m);
   $("showing").appendChild(s);
+
+  renderLegend(m, f);
 
   // For checks: what is on screen
   document.body.dataset.frame = f.file + (hatchFile ? " + " + hatchFile : "");
@@ -210,8 +337,8 @@ async function main() {
     { pane: "hatch", className: "px", interactive: false });
   const app = { m, map, fill, hatch };
   wire(app);
-  document.getElementById("run-line").textContent =
-    `Forecast run: ${m.run.ist} (${m.run.utc.replace("T", " ").replace("Z", " UTC")})`;
+  renderHeader(m);
+  renderFooter(m);
   render(app);
   setStatus("ready");
 }

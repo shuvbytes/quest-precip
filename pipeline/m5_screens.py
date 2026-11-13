@@ -17,7 +17,7 @@ import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SITE = ROOT / "site_build"
+SITE = Path(__import__("os").environ.get("SITE_DIR", ROOT / "site_build"))
 OUT = ROOT / "outputs" / "checks"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
