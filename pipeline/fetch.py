@@ -93,7 +93,14 @@ def fetch_ens_probs(run: dt.datetime, out_dir: Path = RAW_DIR, source: str = "ec
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source", default="ecmwf", choices=["ecmwf", "aws", "azure", "google"])
+    ap.add_argument("--print-latest", action="store_true",
+                    help="only print the newest complete 00z/12z run as YYYY-MM-DDTHH:MMZ (manifest run.utc format); "
+                         "no download. CI compares it with the live site to skip unchanged runs")
     args = ap.parse_args()
+    if args.print_latest:
+        run = latest_main_run(Client(source=args.source, model="ifs", resol="0p25"))
+        print(f"{run:%Y-%m-%dT%H:%M}Z")
+        raise SystemExit(0)
     path = fetch_hres_tp(source=args.source)
     print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
     # Same run as HRES, so the two layers always describe the same forecast.
