@@ -82,7 +82,12 @@ function go() {{
   const w = f.contentWindow, d = f.contentDocument;
   if (!d || !d.body || d.body.dataset.status !== "ready") return setTimeout(go, 100);
   const mc = d.getElementById("map"), label0 = d.getElementById("t-label").textContent;
-  const key = (k) => mc.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: k, keyCode: {{ArrowRight: 39, Enter: 13, Escape: 27}}[k], bubbles: true }}));
+  const key = (k) => {{                // keyCode must be set explicitly (Leaflet reads it; init dicts ignore it)
+    const ev = new w.KeyboardEvent("keydown", {{ key: k, bubbles: true }}), code = {{ArrowRight: 39, Enter: 13, Escape: 27}}[k];
+    Object.defineProperty(ev, "keyCode", {{ get: () => code }});
+    mc.dispatchEvent(ev);
+  }};
+  const cBefore = w.__rainOutlook.map.getCenter();
   d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));   // a real user tabs to the map
   mc.focus();
   out("crosshair", d.getElementById("crosshair").hidden ? "hidden" : "visible");
@@ -90,6 +95,7 @@ function go() {{
   for (let i = 0; i < 3; i++) key("ArrowRight");
   setTimeout(() => {{
     out("timeunchanged", String(d.getElementById("t-label").textContent === label0));
+    out("panned", String(!w.__rainOutlook.map.getCenter().equals(cBefore)));
     key("Enter");
     const wait = (n) => {{
       const p = d.body.dataset.point || "";
@@ -130,13 +136,91 @@ f.addEventListener("load", go);
 </script></body></html>"""
 
 
+# Crosshair accuracy: open a point first (the panel grows the page), then Tab to the map, pan with arrow keys, press
+# Enter, and measure in CSS px how far the selected position is drawn from the crosshair centre.
+AIM = """<!doctype html><html><body data-status="loading" style="margin:0"><iframe id="f" src="index.html#{hash}" style="width:{w}px;height:{h}px;border:0"></iframe>
+<script>
+const f = document.getElementById("f");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function go() {{
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready" || !w.__rainOutlook) return setTimeout(go, 100);
+  const map = w.__rainOutlook.map, mc = d.getElementById("map");
+  // 1. open a point by clicking (panel appears and grows the page), wait for its data
+  map.fire("click", {{ latlng: w.L.latLng(15, 80), originalEvent: {{}} }});
+  for (let i = 0; i < 80 && (d.body.dataset.point || "loading") === "loading"; i++) await sleep(100);
+  await sleep(300);
+  // 2. keyboard: Tab to the map, pan, Enter
+  d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));
+  mc.focus();
+  // Leaflet reads e.keyCode, which browsers ignore in a KeyboardEvent init dict, so set it explicitly; dispatch on the
+  // document (where Leaflet listens while the map has focus) and on the map (where the page's Enter handler is).
+  const key = (k, code, target) => {{
+    const ev = new w.KeyboardEvent("keydown", {{ key: k, bubbles: true }});
+    Object.defineProperty(ev, "keyCode", {{ get: () => code }});
+    Object.defineProperty(ev, "which", {{ get: () => code }});
+    (target || mc).dispatchEvent(ev);
+  }};
+  const c0 = map.getCenter();
+  // Move the map as two ArrowDown + two ArrowRight presses would (Leaflet pans 80 px per press). Leaflet's own arrow
+  // handling does not run under headless Chrome's simulated clock (its pan animation never completes there), so pan
+  // directly by the same pixels; arrow-key panning itself was confirmed by the user in a real browser.
+  map.panBy([160, 160], {{ animate: false }});
+  await sleep(300);
+
+  const settle = async () => {{                      // wait until the map stops moving (pans animate)
+    let prev = "";
+    for (let i = 0; i < 40; i++) {{ const c = map.getCenter(), now = c.lat.toFixed(6) + c.lng.toFixed(6);
+      if (now === prev) return; prev = now; await sleep(150); }}
+  }};
+  await settle();
+  // how far the arrow keys moved the map (measured after the pans have finished)
+  document.body.dataset.panned = map.latLngToContainerPoint(c0).distanceTo(map.getSize().divideBy(2)).toFixed(0);
+  const offsetNow = () => {{
+    const cr = d.getElementById("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
+    return [cr.left + cr.width / 2 - mr.left, cr.top + cr.height / 2 - mr.top];
+  }};
+  key("Enter", 13);
+  const [ax, ay] = offsetNow();
+  const atEnter = map.containerPointToLatLng([ax, ay]);
+  await sleep(300);
+  await settle();
+  document.body.dataset.moved = map.latLngToContainerPoint(atEnter).distanceTo([ax, ay]).toFixed(1);
+  // 3. measure
+  const sub = [...d.querySelectorAll("#point-body .sub")].map((e) => e.textContent).find((t) => t.startsWith("You selected"));
+  const m = sub && sub.match(/([\\d.]+)°N, ([\\d.]+)°E/);
+  const cr = d.getElementById("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
+  const cx = cr.left + cr.width / 2 - mr.left, cy = cr.top + cr.height / 2 - mr.top;
+  let res = "no selection";
+  if (m) {{
+    const p = map.latLngToContainerPoint([+m[1], +m[2]]);
+    res = `arrow keys panned ${{document.body.dataset.panned}} px; map moved after Enter by ${{d.body.dataset.moved || document.body.dataset.moved}} px; selected ${{m[1]}}N ${{m[2]}}E; crosshair at (${{cx.toFixed(1)}}, ${{cy.toFixed(1)}}) px, selection drawn at ` +
+          `(${{p.x.toFixed(1)}}, ${{p.y.toFixed(1)}}) px -> offset ${{(p.x - cx).toFixed(1)}}, ${{(p.y - cy).toFixed(1)}} px; ` +
+          `map box ${{mr.height.toFixed(0)}} px tall, Leaflet thinks ${{map.getSize().y}} px`;
+    document.body.dataset.dy = (p.y - cy).toFixed(1); document.body.dataset.dx = (p.x - cx).toFixed(1);
+  }}
+  document.body.dataset.result = res; document.body.dataset.status = "done";
+}}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def handle(self):
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError):
+            pass                                    # headless Chrome closing early; not an error of the page
+
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        if u.path == "/__aim.html":
+            return self._send(AIM.format(hash=q.get("hash", ["mode=3h&t=33"])[0], w=int(q.get("w", ["1440"])[0]),
+                                         h=int(q.get("h", ["900"])[0])).encode())
         if u.path == "/__cross.html":
             return self._send(CROSS.encode())
         if u.path == "/__keys.html":
@@ -173,7 +257,7 @@ def chrome(args, url):
     # Simulated time waits for every pending download; REAL_TIME=seconds instead shoots after that many real seconds
     # (used to capture the point panel's loading state while a slowed points.bin is still in flight).
     base += [f"--timeout={int(float(os.environ['REAL_TIME']) * 1000)}"] if os.environ.get("REAL_TIME") \
-        else ["--virtual-time-budget=9000"]
+        else [f"--virtual-time-budget={os.environ.get('VTB', '9000')}"]
     return subprocess.run(base + args + [url], capture_output=True, text=True, timeout=120)
 
 
@@ -215,7 +299,8 @@ def keys(hsh="mode=3h&t=33"):
     finally:
         httpd.shutdown()
     get = lambda k: (re.search(rf'data-{k}="([^"]*)"', dom) or [None, "?"])[1]
-    print(f"keys: crosshair on focus={get('crosshair')}, time window unchanged after 3x ArrowRight={get('timeunchanged')}, "
+    print(f"keys: crosshair on focus={get('crosshair')}, map panned by 3x ArrowRight={get('panned')}, "
+          f"time window unchanged={get('timeunchanged')}, "
           f"Enter selected point={get('selected')}, panel={get('panel')}, after Esc panel={get('afteresc')}\n"
           f"      URL hash after selection={get('hash')}")
 
@@ -228,6 +313,29 @@ def crosshair():
         httpd.shutdown()
     res = (re.search(r'data-result="([^"]*)"', dom) or [None, "?"])[1]
     print("crosshair:\n  " + "\n  ".join(res.split(" | ")))
+
+
+def aim():
+    """Crosshair accuracy across window sizes and zooms; prints the offset in CSS px (must be <= 1)."""
+    os.environ.setdefault("VTB", "60000")          # waits for data and pans step by step (simulated clock)
+    httpd, port = serve()
+    worst = 0.0
+    try:
+        for w, h in [(1440, 900), (1280, 700), (1024, 768), (390, 844)]:
+            for z in (5, 6, 7):
+                hsh = f"mode=3h&t=33&z={z}&c=20,80"
+                url = f"http://127.0.0.1:{port}/__aim.html?" + urllib.parse.urlencode({"hash": hsh, "w": w, "h": h})
+                dom = chrome([f"--window-size={max(w, 520) + 20},{h + 20}", "--dump-dom"], url).stdout
+                res = (re.search(r'data-result="([^"]*)"', dom) or [None, "?"])[1]
+                dx = float((re.search(r'data-dx="([^"]*)"', dom) or [None, "nan"])[1])
+                dy = float((re.search(r'data-dy="([^"]*)"', dom) or [None, "nan"])[1])
+                off = (dx * dx + dy * dy) ** 0.5
+                worst = max(worst, off) if off == off else float("inf")
+                print(f"  {w}x{h} zoom {z}: {'OK ' if off <= 1 else 'BAD'} {res}")
+    finally:
+        httpd.shutdown()
+    print(f"worst offset: {worst:.1f} px  ->  {'PASS' if worst <= 1 else 'FAIL'}")
+    return worst <= 1
 
 
 def main(specs):
@@ -246,6 +354,8 @@ def main(specs):
 if __name__ == "__main__":
     if sys.argv[1:2] == ["stress"]:
         stress(*sys.argv[2:3])
+    elif sys.argv[1:2] == ["aim"]:
+        sys.exit(0 if aim() else 1)
     elif sys.argv[1:2] == ["crosshair"]:
         crosshair()
     elif sys.argv[1:2] == ["keys"]:

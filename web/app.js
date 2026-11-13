@@ -667,8 +667,10 @@ function renderPointContent(app) {
   // 3. 24 h windows table: HRES total + ENS chance for every threshold, flags marked
   const wrap = el("div", "table-wrap");
   const tbl = el("table", "ptable");
-  const cap = el("caption", null, "24-hour windows (start time, IST). ▨ HRES much wetter than the ensemble, • much drier.");
-  tbl.appendChild(cap);
+  // Key to the table. The <caption> stays for screen readers but is visually hidden: inside the sideways-scrolling
+  // box it scrolled with the columns and its start was cut off (13 Nov). The visible copy goes below the box.
+  const capText = "24-hour windows (start time, IST). ▨ HRES much wetter than the ensemble, • much drier.";
+  tbl.appendChild(el("caption", "sr-only", capText));
   const frames24 = Pr.hres_24h.frames, kNow = frameIndex(frames24);
   const head = el("tr");
   head.appendChild(el("th", "rowh", ""));          // pinned like the row labels, so scrolled headers never peek out
@@ -707,6 +709,7 @@ function renderPointContent(app) {
   wrap.appendChild(tbl);
   content.appendChild(el("p", "eyebrow", "Every 24-hour window"));
   content.appendChild(wrap);
+  content.appendChild(el("p", "sub tkey", capText));
   // bring the current window's column into view (the table scrolls sideways inside its box on narrow panels)
   // start at a column boundary (the previous window, then the current one), so no column is half hidden
   const firstTh = head.children[Math.max(1, kNow)];
@@ -833,8 +836,13 @@ function wire(app) {
     if (e.key !== "Tab") cross(true);                 // keyboard use on the focused map
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      const c = map.getCenter();
-      selectPoint(app, c.lat, c.lng, true);
+      // Exactly the position under the crosshair: take its on-screen centre and convert that pixel to a location
+      // (not map.getCenter(), which assumes the crosshair sits at Leaflet's idea of the centre).
+      map.stop();                                     // finish no pan animation: the map stays exactly where it is now
+      map.invalidateSize({ pan: false });
+      const cr = $("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
+      const ll = map.containerPointToLatLng([cr.left + cr.width / 2 - mr.left, cr.top + cr.height / 2 - mr.top]);
+      selectPoint(app, ll.lat, ll.lng, true);
     }
   });
   $("point-close").addEventListener("click", () => closePoint(app));
@@ -857,6 +865,13 @@ async function main() {
   const hatch = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds,
     { pane: "hatch", className: "px", interactive: false });
   const app = { m, map, fill, hatch };
+  window.__rainOutlook = { map };                 // for dev checks (crosshair test); not used by the page
+  // Leaflet measures its box once and only re-measures on window resize. The box also changes when the header and
+  // footer text arrive, when fonts load, or when panels change height; a stale size put Leaflet's centre 33-49 px
+  // below the crosshair (13 Nov). Tell Leaflet every time the box actually changes.
+  if ("ResizeObserver" in window) {
+    new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(map.getContainer());
+  }
   wire(app);
   renderHeader(m);
   renderFooter(m);

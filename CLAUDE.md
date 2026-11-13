@@ -373,6 +373,18 @@ User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`,
   stored: ≤ 0.05 mm (3 h).
 - Dev tooling: `m5_screens.py` modes `keys` (keyboard path), `stress` (URL writes), env `SLOW_POINTS`/`REAL_TIME`
   (capture the loading state).
+- **Crosshair fixes (13 Nov, user reports):** (1) shown only for keyboard use (last input = key, not pointer).
+  (2) Enter selected ~24–49 px BELOW the crosshair on desktop: Leaflet measured the map box before the header/footer
+  text arrived; the box then shrank by 66–99 px but Leaflet kept the old size, so its centre (used by Enter) was below the
+  crosshair (drawn at the true centre). Fix: ResizeObserver → `map.invalidateSize`; Enter converts the crosshair's own
+  screen position to a location (`containerPointToLatLng`), after `map.stop()` so no pan animation continues; desktop page
+  capped at the window height (side panel scrolls; map no longer runs below the window). Check:
+  `python pipeline/m5_screens.py aim` (opens a point, pans 226 px, Enter, 4 window sizes × zooms 5–7): old code 33–49 px
+  off (FAIL), fixed ≤ 0.7 px (PASS). Note: headless Chrome does not run Leaflet's own arrow-key pan animations, so the
+  check moves the map by the same pixels directly; arrow-key panning itself was confirmed by the user in a real browser.
+  `window.__rainOutlook = {map}` is exposed only for these dev checks.
+- Table key line under the 24 h table was cut off at the left (a <caption> inside the sideways-scrolling box): now a
+  visually hidden caption for screen readers + a visible line below the box.
 - **Open wording issue (needs the user's decision):** the approved "wetter" sentence ends "Heavy rain is possible,
   not likely." At low thresholds this misleads (e.g. 1.5 mm at X = 1 mm). Proposal: "Rain of X mm or more is
   possible here, but not likely." (and for drier: unchanged). Not changed without approval.
