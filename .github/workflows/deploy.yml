@@ -65,14 +65,16 @@ jobs:
           latest=$(python pipeline/fetch.py --print-latest | tail -n1)
           live=$(curl -fsS "$SITE_URL/data/manifest.json" | python -c "import json,sys; print(json.load(sys.stdin)['run']['utc'])" || echo none)
           echo "newest complete run on ECMWF: $latest; live site: $live"
+          # no explicit "exit" here: in this login shell (bash -el) it runs ~/.bash_logout, which returns 1 on the
+          # Ubuntu runner and failed the step (seen in run 43444214144)
+          skip=false
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.skip_if_unchanged }}" = "true" ]; then
             if [ "$latest" = "$live" ]; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
+              skip=true
               echo "::notice::Live site already shows run $live; nothing to deploy."
-              exit 0
             fi
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
 
       - name: Download HRES tp + ENS tpg* (newest 00z/12z run)
         if: steps.check.outputs.skip != 'true'
