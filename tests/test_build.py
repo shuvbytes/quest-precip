@@ -9,18 +9,6 @@ ENS = sorted(RAW.glob("ens_tpg_*.grib2"))
 pytestmark = pytest.mark.skipif(not (HRES and ENS), reason="real GRIB not downloaded")
 
 
-@pytest.fixture(scope="module")
-def built(tmp_path_factory):
-    import io
-    from contextlib import redirect_stdout
-    from build import main
-    out = tmp_path_factory.mktemp("site") / "data"   # build.py copies web/ into out.parent
-    with redirect_stdout(io.StringIO()):
-        main(str(HRES[-1]), str(ENS[-1]), out)
-    import json
-    return out, json.loads((out / "manifest.json").read_text())
-
-
 def all_frames(m):
     P = m["products"]
     yield from P["hres_3h"]["frames"]

@@ -19,8 +19,10 @@ import numpy as np
 import xarray as xr
 
 import m5_screens as s
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
+import pointcore as pc  # noqa: E402  (shared with the API)
 from build import read_points
-from disagree import keep_min_cluster, point_text_key
 from process import deaccumulate, window_totals
 from region import crop
 
@@ -33,71 +35,13 @@ PLACES = [("Chennai", 13.0827, 80.2707, None), ("Bay of Bengal", 15.00, 86.50, N
           ("Isolated flag (not on map)", 38.00, 78.75, "mode=24h&fill=chance&x=1&t=0")]
 
 
-def js_num(v):
-    """JavaScript Number(v).toString() for the values used here (0.5 -> '0.5', 1.0 -> '1')."""
-    v = float(v)
-    return str(int(v)) if v == int(v) else repr(v)
-
-
-def fmt_mm(v, floor):
-    return f"< {js_num(floor)} mm" if v < floor else f"{v:.1f} mm"
-
-
-def fmt_pct(v, floor):
-    return f"< {js_num(floor)} %" if v < floor else f"{int(np.floor(v + 0.5))} %"     # Math.round
-
-
-def nearby_text(lo, hi, floor):
-    if hi < floor:
-        return f"nearby: all < {js_num(floor)} mm"
-    return f"nearby: {('< ' + js_num(floor)) if lo < floor else f'{lo:.1f}'}–{hi:.1f} mm"
-
-
 def expected(m, pts, row, col, state):
-    P, g = m["products"], m["grid"]
-    idx = row * g["nlon"] + col
-    exp = {}
-    h3, h24, ens = pts["hres_3h"], pts["hres_24h"], pts["ens_prob"]
-    for k, f in enumerate(P["hres_3h"]["frames"]):
-        exp[f"h3-{k}"] = fmt_mm(h3[k, row, col], f["lowest_drawn"])
-    for k, f in enumerate(P["hres_24h"]["frames"]):
-        v = h24[k, row, col]
-        exp[f"h24-{k}"] = f"< {js_num(f['lowest_drawn'])}" if v < f["lowest_drawn"] else f"{v:.1f}"
-    D = P["disagreement"]
-
-    def flag(x, k):
-        fr = D["frames_by_threshold"][x][k]
-        for kind in ("wetter", "drier"):
-            if idx in fr["cells_" + kind]:
-                mask = np.zeros(g["nlat"] * g["nlon"], bool)
-                mask[fr["cells_" + kind]] = True
-                on_map = keep_min_cluster(mask.reshape(g["nlat"], g["nlon"]), D["map_min_cluster"]).ravel()[idx]
-                return kind, bool(on_map)
-        return None
-
-    keys = [js_num(t) for t in P["ens_prob"]["thresholds_mm"]]
-    for kx, x in enumerate(keys):
-        for k, f in enumerate(P["ens_prob"]["frames_by_threshold"][x]):
-            v = ens[kx, k, row, col]
-            txt = f"< {js_num(f['lowest_drawn'])}" if v < f["lowest_drawn"] else f"{int(np.floor(v + 0.5))}"
-            fl = flag(x, k)
-            if fl:
-                txt += " ▨" if fl[0] == "wetter" else " •"
-            exp[f"ens-{x}-{k}"] = txt
-    # summary for the selected window (24 h mode)
-    k = max(i for i, f in enumerate(P["hres_24h"]["frames"]) if f["start_h"] <= state["t"])
-    f = P["hres_24h"]["frames"][k]
-    x = state["x"]
-    kx = keys.index(x)
-    nb = h24[k, max(0, row - 1):row + 2, max(0, col - 1):col + 2]
-    exp["sum-24h"] = f"Rain in 24 hours (HRES): {fmt_mm(h24[k, row, col], f['lowest_drawn'])}"
-    exp["near-24h"] = nearby_text(nb.min(), nb.max(), f["lowest_drawn"])
-    exp["sum-ens"] = f"Chance of ≥ {x} mm (ENS): {fmt_pct(ens[kx, k, row, col], P['ens_prob']['frames_by_threshold'][x][k]['lowest_drawn'])}"
-    fl = flag(x, k)
-    if fl:
-        exp["disagree"] = (D["point_text"][point_text_key(fl[0], float(x))].replace("{hres}", f"{h24[k, row, col]:.1f}")
-                           .replace("{pct}", str(int(np.floor(ens[kx, k, row, col] + 0.5)))).replace("{x}", x))
-    return exp, k, kx, fl
+    """The panel's texts from Python (api/pointcore.py, the same code the API uses)."""
+    exp = pc.panel_fields(m, pts, row, col, state["x"], state["t"])
+    k = pc.window_index(m["products"]["hres_24h"]["frames"], state["t"])
+    kx = pc.threshold_keys(m).index(state["x"])
+    fl = pc.cell_flag(m, state["x"], k, row * m["grid"]["nlon"] + col)
+    return exp, k, kx, (fl["kind"], fl["on_map"]) if fl else None
 
 
 def page_fields(port, hsh, tries=3):
