@@ -445,6 +445,10 @@ function istShort(iso) {                     // "Thu 17:30" for table headers
 function thrKey(t) { return `${Number(t)}`; }
 
 /* min and max of a 2-D field (given as fn(row, col)) over the 3x3 neighbourhood that exists */
+function nearbyText(lo, hi, floor) {
+  if (hi < floor) return `nearby: all < ${fmt(floor)} mm`;
+  return `nearby: ${lo < floor ? "< " + fmt(floor) : lo.toFixed(1)}–${hi.toFixed(1)} mm`;
+}
 function nearby(fn, row, col, nlat, nlon) {
   let lo = Infinity, hi = -Infinity;
   for (let r = Math.max(0, row - 1); r <= Math.min(nlat - 1, row + 1); r++)
@@ -492,6 +496,120 @@ function binColour(prod, v) {
   return prod.colours[Math.min(i, prod.colours.length - 1)];
 }
 
+/* 3-hourly HRES bars over 0-144 h. Plain inline SVG (no chart library): 48 rects + a few lines, exact control over
+   IST day boundaries and the floor rule, crisp at any size, and the numbers are also in a table below.
+   Dataviz skill: one series -> one colour, no legend (title names it); selection = background band, not recolouring;
+   thin bars with gaps; recessive grid; per-bar hover/tap readout with full-height hit targets. */
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), f = v / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+}
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  return e;
+}
+
+function drawChart(app, container, val) {
+  const { m } = app;
+  const frames = m.products.hres_3h.frames;
+  const vals = frames.map((f, k) => val("hres_3h", [k]));
+  const shown = vals.map((v, k) => (v < frames[k].lowest_drawn ? 0 : v));      // floor rule: no bar
+  const W = Math.max(260, Math.floor(container.clientWidth || 300)), H = 150;
+  const pad = { l: 30, r: 6, t: 16, b: 30 };
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  // At least 5 mm on the axis: a single 0.6 mm bar must not fill the chart (no exaggeration of trace rain).
+  const ymax = Math.max(5, niceMax(Math.max(...shown)));
+  const n = frames.length, bw = iw / n;
+  const x = (h) => pad.l + (h / frames[n - 1].end_h) * iw;
+  const y = (v) => pad.t + ih - (v / ymax) * ih;
+
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": `Rain in each 3-hour window at this point, 0 to ${frames[n - 1].end_h} hours; values are in the table below` });
+
+  // selected window band (3 h frame or the 24 h window), behind the bars
+  const sel = state.mode === "3h" ? frames[frameIndex(frames)] : m.products.hres_24h.frames[frameIndex(m.products.hres_24h.frames)];
+  svg.appendChild(svgEl("rect", { x: x(sel.start_h), y: pad.t, width: x(sel.end_h) - x(sel.start_h), height: ih,
+    fill: "#e8eef7" }));
+
+  // recessive horizontal grid + y labels (mm)
+  [0, 0.5, 1].forEach((fr) => {
+    const v = ymax * fr, yy = y(v);
+    svg.appendChild(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: yy, y2: yy, stroke: "#e3e6ea", "stroke-width": 1 }));
+    const t = svgEl("text", { x: pad.l - 4, y: yy + 3, "text-anchor": "end", class: "ax" });
+    t.textContent = fmt(+v.toPrecision(3));
+    svg.appendChild(t);
+  });
+  const unit = svgEl("text", { x: pad.l - 4, y: 9, "text-anchor": "end", class: "ax" });
+  unit.textContent = "mm";
+  svg.appendChild(unit);
+
+  // IST midnights: day boundaries and day labels
+  const run = parseUTC(m.run.utc), istOff = 330 * 60 * 1000, end = run + frames[n - 1].end_h * 3.6e6;
+  const firstMid = Math.ceil((run + istOff) / 864e5) * 864e5 - istOff;           // first IST midnight after run
+  for (let t = firstMid - 864e5; t < end; t += 864e5) {
+    const h0 = Math.max(0, (t - run) / 3.6e6), h1 = Math.min(frames[n - 1].end_h, (t + 864e5 - run) / 3.6e6);
+    if (t >= run) svg.appendChild(svgEl("line", { x1: x(h0), x2: x(h0), y1: pad.t, y2: pad.t + ih + 4,
+      stroke: "#b9bfc7", "stroke-width": 1 }));
+    if (h1 - h0 >= 9) {                                                         // label days with room for it
+      const d = new Date(Math.max(t, run) + istOff);
+      const lab = svgEl("text", { x: (x(h0) + x(h1)) / 2, y: H - 14, "text-anchor": "middle", class: "ax" });
+      lab.textContent = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()}`;
+      svg.appendChild(lab);
+    }
+  }
+  const note = svgEl("text", { x: W - pad.r, y: H - 2, "text-anchor": "end", class: "ax" });
+  note.textContent = "IST days";
+  svg.appendChild(note);
+
+  // bars (thin, 2 px gap) + full-height hit targets with a readout
+  const colour = m.products.hres_3h.colours[4];
+  const readout = el("p", "readout", "Hover or tap a bar for its value.");
+  frames.forEach((f, k) => {
+    if (shown[k] > 0) {
+      const top = y(shown[k]);
+      svg.appendChild(svgEl("rect", { x: x(f.start_h) + 1, y: top, width: Math.max(1, bw - 2),
+        height: Math.max(1, pad.t + ih - top), rx: 1, fill: colour }));
+    }
+    const hit = svgEl("rect", { x: x(f.start_h), y: pad.t, width: bw, height: ih, fill: "transparent", class: "hit" });
+    const label = `${f.label_ist}: ${fmtMm(vals[k], f.lowest_drawn)}`;
+    const title = svgEl("title");
+    title.textContent = label;
+    hit.appendChild(title);
+    const show = () => { readout.textContent = label; };
+    hit.addEventListener("mouseenter", show);
+    hit.addEventListener("click", show);
+    svg.appendChild(hit);
+  });
+  // baseline
+  svg.appendChild(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: pad.t + ih, y2: pad.t + ih, stroke: "#8a8f98", "stroke-width": 1 }));
+
+  container.appendChild(el("p", "eyebrow", "Rain in each 3 hours (HRES), 0–" + frames[n - 1].end_h + " h"));
+  if (Math.max(...shown) === 0) {
+    container.appendChild(el("p", "sub", `No 3-hour window reaches ${fmt(frames[0].lowest_drawn)} mm at this point.`));
+  } else {
+    container.appendChild(svg);
+    container.appendChild(readout);
+  }
+
+  // the same numbers as a table (screen readers, and the exact-match check)
+  const det = el("details", "vals");
+  det.appendChild(el("summary", null, "3-hour values as a table"));
+  const t = el("table", "ptable");
+  frames.forEach((f, k) => {
+    const tr = el("tr");
+    const th = el("th", "rowh", f.label_ist); th.scope = "row";
+    const td = el("td", null, fmtMm(vals[k], f.lowest_drawn));
+    td.dataset.field = `h3-${k}`;
+    tr.append(th, td);
+    t.appendChild(tr);
+  });
+  det.appendChild(t);
+  container.appendChild(det);
+}
+
 /* Window summary, nearby range, disagreement sentence, 24 h table (and, step 4, the 3 h chart). */
 function renderPointContent(app) {
   const { m, P, point } = app;
@@ -509,7 +627,7 @@ function renderPointContent(app) {
     const [lo, hi] = near("hres_3h", [k]);
     sum.append(el("p", "when", f.label_ist),
       el("p", "big", `Rain in 3 hours: ${fmtMm(val("hres_3h", [k]), fl)}`),
-      el("p", "near", `nearby: ${fmtMm(lo, fl).replace(" mm", "")}–${fmtMm(hi, fl)}`));
+      el("p", "near", nearbyText(lo, hi, fl)));
     sum.querySelector(".big").dataset.field = "sum-3h";
     sum.querySelector(".near").dataset.field = "near-3h";
   } else {
@@ -519,7 +637,7 @@ function renderPointContent(app) {
     const [lo, hi] = near("hres_24h", [k]);
     const pct = val("ens_prob", [kx, k]);
     const big = el("p", "big", `Rain in 24 hours (HRES): ${fmtMm(val("hres_24h", [k]), fl)}`);
-    const nr = el("p", "near", `nearby: ${fmtMm(lo, fl).replace(" mm", "")}–${fmtMm(hi, fl)}`);
+    const nr = el("p", "near", nearbyText(lo, hi, fl));
     const ch = el("p", "big", `Chance of ≥ ${fmt(x)} mm (ENS): ${fmtPct(pct, ef.lowest_drawn)}`);
     big.dataset.field = "sum-24h"; nr.dataset.field = "near-24h"; ch.dataset.field = "sum-ens";
     sum.append(el("p", "when", f.label_ist), big, nr, ch);
@@ -540,6 +658,11 @@ function renderPointContent(app) {
   }
   content.appendChild(sum);
 
+  // 3 h bar chart
+  const chartBox = el("div", "chart");
+  content.appendChild(chartBox);
+  drawChart(app, chartBox, val);
+
   // 3. 24 h windows table: HRES total + ENS chance for every threshold, flags marked
   const wrap = el("div", "table-wrap");
   const tbl = el("table", "ptable");
@@ -547,7 +670,7 @@ function renderPointContent(app) {
   tbl.appendChild(cap);
   const frames24 = Pr.hres_24h.frames, kNow = frameIndex(frames24);
   const head = el("tr");
-  head.appendChild(el("th", null, ""));
+  head.appendChild(el("th", "rowh", ""));          // pinned like the row labels, so scrolled headers never peek out
   frames24.forEach((f, k) => {
     const th = el("th", k === kNow ? "now" : "", istShort(f.start_utc));
     th.title = f.label_ist; th.scope = "col";
@@ -584,8 +707,9 @@ function renderPointContent(app) {
   content.appendChild(el("p", "eyebrow", "Every 24-hour window"));
   content.appendChild(wrap);
   // bring the current window's column into view (the table scrolls sideways inside its box on narrow panels)
-  const nowTh = head.children[kNow + 1];
-  wrap.scrollLeft = Math.max(0, nowTh.offsetLeft - thH.offsetWidth - 8);
+  // start at a column boundary (the previous window, then the current one), so no column is half hidden
+  const firstTh = head.children[Math.max(1, kNow)];
+  wrap.scrollLeft = Math.max(0, firstTh.offsetLeft - head.children[1].offsetLeft);
   content.appendChild(el("p", "sub", "Chances in %. Values below the map's lowest step are shown as “< …”."));
 
   document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
