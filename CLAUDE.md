@@ -162,7 +162,10 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
 ## Status (13 Nov, night IST): M0–M7 done; live at https://shuvbytes.github.io/quest-precip/
-**M0–M7 done; 42 tests passing; repo public; site deployed by GitHub Actions (see M7 section).** Earlier (evening): M6 closed by the user after confirming
+**M0–M7 done; 42 tests passing; repo public; site deployed by GitHub Actions (see M7 section).**
+**Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
+slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
+both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check: user testing now, report pending. Earlier (evening): M6 closed by the user after confirming
 both keyboard fixes in Safari (the ring lands on the crosshair). Earlier (afternoon): M0–M5 done. The map page runs locally and was checked by the user in Safari (all five check
 views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
 **https://github.com/shuvbytes/quest-precip** (public since 13 Nov, branch `main`).
@@ -407,18 +410,33 @@ User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`,
 - **Keyboard edges confirmed by the user in Safari (13 Nov):** the crosshair reaches the bottom dashed edge (~5°N,
   Sri Lanka) and the ring lands on the crosshair.
 
-## M8 idea (user, 13 Nov) — record only, build in M8 after deployment
-Compact **point card** anchored next to the selected point on the map: grid point + window, the main number, a chance
-chip, a disagreement badge, a 6-day sparkline, and a "Full details" button that opens the existing side panel.
-Updates with the slider; Esc/× closes; bottom sheet on phones; keyboard-accessible. **Reuse the panel's data code**
-(selection, points.bin decode, formatting, flag lookup) rather than duplicating it.
+## M8 backlog (user, 13 Nov night) — recorded, not built; order: A + B first (14 Nov), card/README after M7b
+**A. Place names (first priority: the user could not find Chennai on the map)**
+1. City labels: state capitals, major metros, neighbouring capitals; more appear as you zoom in; white halo so they stay
+   readable over rain colours. Local city list in the repo (source + licence cited), no tile server.
+2. Neighbouring country names as labels (no extra political borders drawn).
+3. Indian state boundaries as thin grey lines; source and licence verified and cited (like DataMeet in `web/geo/SOURCES.md`);
+   must stay consistent with the official India boundary already drawn.
+4. Place search box using the same local city list (no external API), fully keyboard-usable (combobox: type, arrows, Enter
+   selects the city's nearest grid point and opens the panel).
+5. Point panel: "Near <city> (N km)" (nearest city from the same list, great-circle distance).
 
-## M8 polish notes (user, 13 Nov night) — record only, not fixed yet
-- **Hatch looks jagged/staircased at max zoom** (raster PNG stretched with `pixelated`). Idea: draw the hatch as vector
-  shapes (e.g. an SVG pattern built in the browser from the manifest's flagged-cell lists, map clusters ≥ 3 only) so
-  it stays crisp at any zoom; it could replace the fine/bold hatch PNGs.
-- **No orientation at max zoom over sea.** Idea: a lat/lon readout (cursor / crosshair position) or a small locator
-  inset showing where the view is within the region.
+**B. Keyboard navigation (each arrow press jumps too far when zoomed out)** — replaces the current 80 px / Shift 240 px /
+Alt = one grid point scheme (`191cbe7`)
+1. Arrow = crosshair moves one grid point (0.25°); Shift+arrow = 10 grid points. Map pans to keep the crosshair visible.
+2. Live readout next to the crosshair: lat/lon + nearest city (also covers the "no orientation over sea" note).
+3. +/− zoom keeps the crosshair on the same location.
+4. Tests: every grid point reachable (edges + corners, fitted zoom and zoom 7, desktop + phone, as `m5_screens.py edges` /
+   `targets`), Enter selects the grid point under the crosshair.
+
+**C. Polish**
+1. Hatch stripes look jagged/staircased at max zoom (raster PNG stretched, `pixelated`): consider vector hatching, e.g. an
+   SVG pattern built in the browser from the manifest's flagged-cell lists (map clusters ≥ 3 only), crisp at any zoom.
+2. Point card next to the selected point (user, 13 Nov): grid point + window, main number, chance chip, disagreement
+   badge, 6-day sparkline, "Full details" button opening the existing side panel; updates with the slider; Esc/× closes;
+   bottom sheet on phones; keyboard-accessible. **Reuse the panel's data code** (selection, points.bin decode,
+   formatting, flag lookup) rather than duplicating it.
+3. README.
 
 ## M7 — GitHub Actions + Pages (13 Nov) — `.github/workflows/deploy.yml`
 - **Live URL: https://shuvbytes.github.io/quest-precip/** (repo made public 13 Nov after an audit: 48 tracked files, no
@@ -444,15 +462,19 @@ Updates with the slider; Esc/× closes; bottom sheet on phones; keyboard-accessi
 - Live panel check (headless, Python decoding of the live points.bin): Chennai, Bay (t=60 and t=96, X = 100) 417/417
   fields exact; the dry central-India capture always snapshotted mid-download (test timing, not an app error).
 
-## Next steps
-1. User verifies the live site on laptop + phone (checklist given 13 Nov). 2. Check the first scheduled run
-(20:23 UTC 13 Nov → 12z run). 3. M7b FastAPI /point (14 Nov). 4. M8 polish incl. point card, README.
+## Next steps (order for 14 Nov, user-agreed 13 Nov night)
+0. Act on the user's phone-test report; check the first scheduled run (20:23 UTC 13 Nov → 12z run) succeeded/skipped.
+1. **M8 A + B**: place names (cities, country labels, state lines, local search, "Near <city>") and grid-step keyboard
+   navigation with live readout.
+2. **M7b** FastAPI `/point` (HF Spaces, Render fallback; browser lookup stays as fallback).
+3. **M8 C**: point card, then README (vector hatch if time).
+4. IMD-day view only if all of the above is done; 15 Nov buffer only.
 
 ## Remaining schedule (agreed 12 Nov)
 | Day (IST) | Work |
 |---|---|
 | 12 Nov evening (after break) | M4 — **done**, plus disagreement layer and GitHub backup |
-| 13 Nov (from morning) | M5 Leaflet front end (locally) — **done**, M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
-| 14 Nov | M7b FastAPI /point (HF Spaces, Render fallback); automation (GitHub Actions cron 2×/day, 00z/12z run selection); M8 polish ("last updated", README). Target: app finished by the night of 14 Nov |
+| 13 Nov (from morning) | M5 Leaflet front end — **done**, M6 point panel — **done**, M7 Pages deploy — **done** (live URL) |
+| 14 Nov | (reordered 13 Nov night) M8 A+B place names + keyboard → M7b FastAPI /point → point card + README. Automation already done in M7. Target: app finished by the night of 14 Nov |
 | 14 Nov night | IMD-day (08:30–08:30 IST) HRES view, only if M8 is done |
 | 15 Nov | Buffer only: fixes, no new features. Hard stop at start + 72 h |
