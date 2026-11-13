@@ -116,7 +116,7 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
 
-      # Tell the point API (Hugging Face Space) to look for the new run now rather than within its 5-minute check.
-      # Side effect: the free Space is woken twice a day, so it rarely sleeps. Never fails the deploy.
+      # Tell the point API (Render free web service) to load the new run now rather than at its next 5-minute check.
+      # It may be asleep (free services sleep after 15 min idle); waking takes about a minute. Never fails the deploy.
       - name: Nudge the point API
-        run: curl -sS --max-time 90 https://shuvayandg-quest-precip-api.hf.space/health || true
+        run: curl -sS --max-time 120 https://quest-precip-api.onrender.com/health || true

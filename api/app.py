@@ -4,7 +4,7 @@ Data: the API loads manifest.json + points.bin from the live site (GitHub Pages)
 checks every few minutes whether a newer build is published (ETag / generated_utc). So it is always in sync with the
 map and needs no data pipeline of its own. All point logic is in pointcore.py, shared with the panel check.
 
-Run locally:  uvicorn app:app --port 7860            (env DATA_DIR=<site_build/data> to use local files)
+Run locally:  uvicorn app:app --port 7860   (on Render: --host 0.0.0.0 --port $PORT)            (env DATA_DIR=<site_build/data> to use local files)
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import httpx
 from fastapi import BackgroundTasks, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 import pointcore as pc
@@ -110,6 +111,8 @@ app = FastAPI(
         "ECMWF does not endorse this service."),
 )
 # DEV_ORIGIN_REGEX: local checks only (e.g. http://127\.0\.0\.1:\d+); unset on the Space, so only the site is allowed.
+# gzip: a /point answer is 36.7 kB raw, 3.2 kB gzipped; Render's free plan includes 5 GB outbound per month
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_origin_regex=os.environ.get("DEV_ORIGIN_REGEX"),
                    allow_methods=["GET"], allow_headers=[])
 

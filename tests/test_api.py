@@ -173,3 +173,9 @@ def test_api_reloads_when_a_new_build_appears(client):
     api.store.last_check = 0                           # pretend the last check is old
     client.get("/health")                              # schedules the refresh (runs after the response)
     assert client.get("/health").json()["run_utc"] == "2099-01-01T00:00Z"
+
+
+def test_api_gzips_point_answers(client):
+    """Render's free plan includes 5 GB outbound a month: /point answers go out gzipped (~3 kB instead of ~37 kB)."""
+    r = client.get("/point", params={"lat": 15, "lon": 86.5}, headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip"

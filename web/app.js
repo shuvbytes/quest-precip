@@ -344,7 +344,7 @@ function pointValue(P, name, lead, row, col) {
 }
 
 /* ---------- where the point values come from (M7b) ----------
-   1) the point API (Hugging Face Space, manifest.api), with a short timeout, accepted only if it serves the same
+   1) the point API (Render web service, manifest.api), with a short timeout, accepted only if it serves the same
       forecast build as this page; 2) otherwise the in-browser lookup in points.bin (downloaded once).
    Both give {val(name, lead), near(name, lead), note}, so the panel has one renderer. ?api=off forces 2 (checks). */
 const API_OFF = new URLSearchParams(location.search).get("api") === "off";
