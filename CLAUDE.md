@@ -326,6 +326,14 @@ Changes after the user's review (13 Nov):
   x=1 t=108) look correct and consistent with the expected labels. The browser's JavaScript console was **not** checked by
   the user; headless Chrome shows status ready and no errors for the same five views. (`--directory` keeps the server
   working when a rebuild deletes and recreates site_build/; a server started inside the old folder had stopped working.)
+- **Safari console, link 1 (user, 13 Nov):** (a) Warning "Ignored an error from a script that is not part of this page:
+  Script error. (app.js, line 30)": line 30 is our console.warn, i.e. the fix working. (b) "SyntaxError: Unexpected token
+  '{'. Expected ')' to end a compound expression": NOT our code. app.js and leaflet.js both parse cleanly in JavaScriptCore
+  (macOS `jsc`, Safari's engine; jsc does flag deliberately broken files with this message shape), and a parse error in
+  either would kill the map. So it comes from a script injected into the page, almost certainly a Safari extension; the
+  same error reached our handler as the opaque "Script error.". Confirm with a Private window / extensions off.
+  (c) 404 leaflet.js.map: the console requests the source map named at the end of leaflet.js. Fixed by vendoring
+  `leaflet.js.map` (cdnjs 1.9.4, 225 kB); test added.
 - **Cache busting**: `build.copy_web` rewrites index.html links to `app.js?v=<sha256[:10]>` (also style.css, vendored
   Leaflet), so changed files always get new URLs; tested in `test_built_index_links_are_cache_busted`.
 Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/

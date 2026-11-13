@@ -170,6 +170,8 @@ def test_vendored_leaflet_matches_integrity_and_page_has_no_cdn():
         assert got == want, src
     assert "cdnjs" not in re.sub(r"<!--.*?-->", "", html, flags=re.S)
     assert (web / "vendor/leaflet-1.9.4/LICENSE").exists()
+    # leaflet.js ends with "//# sourceMappingURL=leaflet.js.map"; without the file, an open browser console logs a 404
+    assert (web / "vendor/leaflet-1.9.4/leaflet.js.map").exists()
 
 
 def test_built_index_links_are_cache_busted(built):
