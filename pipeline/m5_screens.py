@@ -344,7 +344,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def serve():
-    httpd = socketserver.TCPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(SITE)))
+    httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(SITE)))
+    httpd.daemon_threads = True   # threaded: a slow points.bin (SLOW_POINTS) must not block the other files
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, httpd.server_address[1]
 

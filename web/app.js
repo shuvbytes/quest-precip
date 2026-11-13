@@ -300,7 +300,9 @@ function loadPoints(m, onProgress) {
   pointsPromise = (async () => {
     const r = await fetch(DATA + m.points.file, { cache: "no-cache" });
     if (!r.ok) throw new Error(`${m.points.file}: HTTP ${r.status}`);
-    const total = +r.headers.get("Content-Length") || m.points.bytes;
+    // Progress total = decoded size from the manifest. Not Content-Length: GitHub Pages gzips this file, so that
+    // header is the compressed size (~0.62 MB) while the stream yields decoded bytes (3.66 MB) -> bar went to ~590 %.
+    const total = m.points.bytes;
     let buf;
     if (r.body && r.body.getReader) {
       const reader = r.body.getReader();
@@ -420,7 +422,8 @@ function renderPoint(app) {
   loadPoints(m, (got, total) => {
     const pct = Math.min(100, Math.round(100 * got / total));
     bar.value = pct;
-    label.textContent = `Loading point data (first time only)… ${pct} % of ${(total / 1e6).toFixed(1)} MB`;
+    // percent only: the decoded size (3.7 MB) is not what is downloaded (~0.6 MB gzip on GitHub Pages)
+    label.textContent = `Loading point data (first time only)… ${pct} %`;
   }).then((P) => {
     app.P = P;
     if (app.point === point) renderPointContent(app);
