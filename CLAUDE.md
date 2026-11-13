@@ -413,6 +413,13 @@ chip, a disagreement badge, a 6-day sparkline, and a "Full details" button that 
 Updates with the slider; Esc/× closes; bottom sheet on phones; keyboard-accessible. **Reuse the panel's data code**
 (selection, points.bin decode, formatting, flag lookup) rather than duplicating it.
 
+## M8 polish notes (user, 13 Nov night) — record only, not fixed yet
+- **Hatch looks jagged/staircased at max zoom** (raster PNG stretched with `pixelated`). Idea: draw the hatch as vector
+  shapes (e.g. an SVG pattern built in the browser from the manifest's flagged-cell lists, map clusters ≥ 3 only) so
+  it stays crisp at any zoom; it could replace the fine/bold hatch PNGs.
+- **No orientation at max zoom over sea.** Idea: a lat/lon readout (cursor / crosshair position) or a small locator
+  inset showing where the view is within the region.
+
 ## M7 — GitHub Actions + Pages (13 Nov) — `.github/workflows/deploy.yml`
 - **Live URL: https://shuvbytes.github.io/quest-precip/** (repo made public 13 Nov after an audit: 48 tracked files, no
   data/GRIB/points.bin/manifest/site_build/.claude now or in history, no token-like strings; the commit email stays public,
