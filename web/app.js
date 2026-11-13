@@ -108,7 +108,7 @@ function addForecastEdge(map, m) {
 
 /* ---------------- state (kept in the URL hash, so a view can be shared or bookmarked) ---------------- */
 
-const state = { mode: "24h", fill: "chance", x: "10", hatch: true, t: 0 };
+const state = { mode: "24h", fill: "chance", x: "10", hatch: true, t: 0, p: null };   // p = [lat, lon] of a grid point
 
 function readHash(m) {
   const h = new URLSearchParams(location.hash.slice(1));
@@ -117,6 +117,8 @@ function readHash(m) {
   if (h.get("x") && m.products.ens_prob.frames_by_threshold[h.get("x")]) state.x = h.get("x");
   if (h.get("hatch") === "0") state.hatch = false;
   if (h.get("t") !== null && !isNaN(+h.get("t"))) state.t = +h.get("t");
+  const pp = (h.get("p") || "").split(",").map(Number);
+  if (pp.length === 2 && pp.every(Number.isFinite)) state.p = pp;
   const z = h.get("z"), c = h.get("c");
   return z && c ? { zoom: +z, center: c.split(",").map(Number) } : null;
 }
@@ -130,6 +132,7 @@ function writeHash() {
   hashTimer = setTimeout(() => {
     const h = new URLSearchParams({ mode: state.mode, t: state.t });
     if (state.mode === "24h") { h.set("fill", state.fill); h.set("x", state.x); h.set("hatch", state.hatch ? 1 : 0); }
+    if (state.p) h.set("p", state.p.map((v) => v.toFixed(2)).join(","));
     const next = "#" + h.toString();
     if (next === location.hash) return;
     try { history.replaceState(null, "", next); } catch (e) { console.warn("URL not updated:", e.message); }
@@ -288,6 +291,162 @@ function renderFooter(m) {
   foot.append(p1, p2);
 }
 
+/* ---------------- point panel (M6) ---------------- */
+
+/* points.bin is fetched once, on the first point selection, with a visible progress state. */
+let pointsPromise = null;
+function loadPoints(m, onProgress) {
+  if (pointsPromise) return pointsPromise;
+  pointsPromise = (async () => {
+    const r = await fetch(DATA + m.points.file, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`${m.points.file}: HTTP ${r.status}`);
+    const total = +r.headers.get("Content-Length") || m.points.bytes;
+    let buf;
+    if (r.body && r.body.getReader) {
+      const reader = r.body.getReader();
+      const chunks = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value); got += value.length;
+        onProgress(got, total);
+      }
+      buf = new Uint8Array(got);
+      let o = 0;
+      for (const c of chunks) { buf.set(c, o); o += c.length; }
+      buf = buf.buffer;
+    } else {
+      buf = await r.arrayBuffer();
+    }
+    if (buf.byteLength !== m.points.bytes) throw new Error(`points.bin is ${buf.byteLength} bytes, expected ${m.points.bytes}`);
+    const view = new DataView(buf);                     // explicit little-endian reads, whatever the device
+    const arrays = {};
+    for (const a of m.points.arrays) arrays[a.name] = a;
+    return { view, arrays };
+  })();
+  pointsPromise.catch(() => { pointsPromise = null; });  // allow Retry after a failure
+  return pointsPromise;
+}
+
+/* Value of array `name` at (leading indices..., row, col), in its units (scale applied). */
+function pointValue(P, name, lead, row, col) {
+  const a = P.arrays[name];
+  const [nlat, nlon] = a.shape.slice(-2);
+  let idx = 0;
+  const dims = a.shape.slice(0, -2);
+  lead.forEach((v, i) => { idx = idx * dims[i] + v; });
+  idx = (idx * nlat + row) * nlon + col;
+  const raw = a.dtype === "uint16" ? P.view.getUint16(a.offset + idx * 2, true) : P.view.getUint8(a.offset + idx);
+  return raw * a.scale;
+}
+
+/* Nearest grid point to (lat, lon); null if outside the forecast area (the image covers the cell edges). */
+function gridPoint(m, lat, lon) {
+  const g = m.grid;
+  const [[s, w], [n, e]] = m.image.bounds;
+  if (!(lat >= s && lat <= n && lon >= w && lon <= e)) return null;
+  const row = Math.min(g.nlat - 1, Math.max(0, Math.round((g.lat_north - lat) / g.dlat)));
+  const col = Math.min(g.nlon - 1, Math.max(0, Math.round((lon - g.lon_west) / g.dlon)));
+  return { row, col, lat: g.lat_north - row * g.dlat, lon: g.lon_west + col * g.dlon };
+}
+
+function fmtLat(v) { return `${Math.abs(v).toFixed(2)}°${v >= 0 ? "N" : "S"}`; }
+function fmtLon(v) { return `${Math.abs(v).toFixed(2)}°${v >= 0 ? "E" : "W"}`; }
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* Select the grid point nearest to a clicked/tapped location (or restore one from the URL). */
+function selectPoint(app, lat, lon, clicked) {
+  const { m, map } = app;
+  const box = $("point"), body = $("point-body");
+  box.hidden = false;
+  $("point-hint").hidden = true;
+  body.innerHTML = "";
+  const gp = gridPoint(m, lat, lon);
+  if (app.marker) { map.removeLayer(app.marker); app.marker = null; }
+  if (!gp) {
+    state.p = null; app.point = null;
+    $("point-title").textContent = "No forecast here";
+    const r = m.region;
+    body.appendChild(el("p", "outside",
+      `This point (${fmtLat(lat)}, ${fmtLon(lon)}) is outside the forecast area, ${r.lat_min}–${r.lat_max}°N, ` +
+      `${r.lon_min}–${r.lon_max}°E (grey shading beyond the dashed edge). Tap inside the area for a forecast.`));
+    document.body.dataset.point = "outside";
+    writeHash();
+    return;
+  }
+  state.p = [gp.lat, gp.lon];
+  app.point = { ...gp, clicked: clicked ? [lat, lon] : null };
+  app.marker = L.circleMarker([gp.lat, gp.lon], { pane: "lines", radius: 6, weight: 2, color: "#111",
+    fillColor: "#fff", fillOpacity: 0.9, interactive: false }).addTo(map);
+  writeHash();
+  renderPoint(app);
+}
+
+function closePoint(app) {
+  $("point").hidden = true;
+  $("point-hint").hidden = false;
+  if (app.marker) { app.map.removeLayer(app.marker); app.marker = null; }
+  state.p = null; app.point = null;
+  document.body.dataset.point = "";
+  writeHash();
+}
+
+/* Header + loading state; the content itself is filled by renderPointContent once points.bin is in. */
+function renderPoint(app) {
+  const { m, point } = app;
+  if (!point) return;
+  $("point-title").textContent = `Grid point ${fmtLat(point.lat)}, ${fmtLon(point.lon)}`;
+  const body = $("point-body");
+  body.innerHTML = "";
+  if (point.clicked) body.appendChild(el("p", "sub", `You selected ${fmtLat(point.clicked[0])}, ${fmtLon(point.clicked[1])}`));
+  body.appendChild(el("p", "meaning", m.grid.value_meaning));
+  const content = el("div", "point-content");
+  body.appendChild(content);
+  const loading = el("div", "loading");
+  const label = el("span", null, "Loading point data (first time only)…");
+  const bar = el("progress");
+  bar.max = 100;
+  loading.append(label, bar);
+  content.appendChild(loading);
+  document.body.dataset.point = "loading";
+  loadPoints(m, (got, total) => {
+    const pct = Math.min(100, Math.round(100 * got / total));
+    bar.value = pct;
+    label.textContent = `Loading point data (first time only)… ${pct} % of ${(total / 1e6).toFixed(1)} MB`;
+  }).then((P) => {
+    app.P = P;
+    if (app.point === point) renderPointContent(app);
+  }).catch((e) => {
+    content.innerHTML = "";
+    const p = el("p", "err", `Could not load the point data: ${e.message}`);
+    const retry = el("button", null, "Retry");
+    retry.type = "button";
+    retry.addEventListener("click", () => renderPoint(app));
+    p.appendChild(retry);
+    content.appendChild(p);
+    document.body.dataset.point = "error";
+  });
+}
+
+/* Filled in step 3/4: window summary, nearby range, disagreement sentence, 24 h table, 3 h chart. */
+function renderPointContent(app) {
+  const { m, P, point } = app;
+  const content = $("point-body").querySelector(".point-content");
+  if (!content || !P || !point) return;
+  content.innerHTML = "";
+  const k = frameIndex(m.products.hres_3h.frames);
+  const v = pointValue(P, "hres_3h", [k], point.row, point.col);
+  content.appendChild(el("p", "sub", `Loaded. 3 h value now: ${v.toFixed(1)} mm`));
+  document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
+}
+
 /* ---------------- render ---------------- */
 
 function render(app) {
@@ -334,6 +493,7 @@ function render(app) {
   $("showing").appendChild(s);
 
   renderLegend(m, f);
+  if (app.point && app.P) renderPointContent(app);
 
   // For checks: what is on screen
   document.body.dataset.frame = f.file + (hatchFile ? " + " + hatchFile : "");
@@ -385,6 +545,9 @@ function wire(app) {
     if (e.key === "ArrowRight") step(1);
   });
   map.on("zoomend", rerender);
+  map.on("click", (e) => selectPoint(app, e.latlng.lat, e.latlng.lng, true));
+  $("point-close").addEventListener("click", () => closePoint(app));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("point").hidden) closePoint(app); });
 }
 
 async function main() {
@@ -407,6 +570,7 @@ async function main() {
   renderHeader(m);
   renderFooter(m);
   render(app);
+  if (state.p) selectPoint(app, state.p[0], state.p[1], false);   // shared link with a selected point
   setStatus("ready");
   // The forecast did load, so any banner left by an earlier error would be false: remove it.
   document.querySelectorAll(".map-wrap .error").forEach((el) => el.remove());

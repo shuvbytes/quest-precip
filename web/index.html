@@ -29,6 +29,16 @@
     </section>
 
     <aside class="panel" id="panel" aria-label="Map controls and legend">
+      <!-- Point panel: first in the side panel, so on phones (stacked layout) it sits directly below the map. -->
+      <section id="point" class="point" hidden aria-live="polite" aria-label="Forecast at the selected point">
+        <div class="point-head">
+          <h2 id="point-title">Selected point</h2>
+          <button type="button" id="point-close" class="point-close" aria-label="Close point details (Esc)">×</button>
+        </div>
+        <div id="point-body"></div>
+      </section>
+      <p class="hint" id="point-hint">Tap or click the map for the forecast at a point.</p>
+
       <div class="seg" role="group" aria-label="What to show">
         <button type="button" data-mode="3h">3-hour rain</button>
         <button type="button" data-mode="24h">24-hour rain &amp; chance</button>

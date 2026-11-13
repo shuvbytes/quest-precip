@@ -35,8 +35,10 @@ const f = document.getElementById("f");
 function copy() {{
   const d = f.contentDocument;
   if (!d || !d.body || d.body.dataset.status === "loading") return setTimeout(copy, 100);
+  // wait for a selected point's data too (max ~3 s, so a deliberately slowed load still shows its loading state)
+  if (d.body.dataset.point === "loading" && (window.__w = (window.__w || 0) + 1) < 30) return setTimeout(copy, 100);
   if ({scroll}) f.contentWindow.scrollTo(0, {scroll});
-  for (const k of ["status", "zoom", "hscroll", "frame"]) document.body.dataset[k] = d.body.dataset[k] || "";
+  for (const k of ["status", "zoom", "hscroll", "frame", "point"]) document.body.dataset[k] = d.body.dataset[k] || "";
   const n = d.getElementById("zoom-note");
   document.body.dataset.zoomnote = n && !n.hidden ? "visible" : "hidden";
 }}
@@ -79,6 +81,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         q = urllib.parse.parse_qs(u.query)
         if u.path == "/__stress.html":
             return self._send(STRESS.format(hash=q.get("hash", ["mode=3h&t=0"])[0]).encode())
+        if u.path.endswith("points.bin") and os.environ.get("SLOW_POINTS"):
+            # dev only: hold the point file back so the panel's loading state can be screenshotted
+            import time
+            time.sleep(float(os.environ["SLOW_POINTS"]))
         if u.path != "/__viewport.html":
             return super().do_GET()
         body = WRAPPER.format(w=int(q["w"][0]), h=int(q["h"][0]), scroll=int(q.get("scroll", ["0"])[0]),
@@ -101,7 +107,11 @@ def serve():
 
 def chrome(args, url):
     base = [CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
-            "--virtual-time-budget=9000", "--run-all-compositor-stages-before-draw"]
+            "--run-all-compositor-stages-before-draw"]
+    # Simulated time waits for every pending download; REAL_TIME=seconds instead shoots after that many real seconds
+    # (used to capture the point panel's loading state while a slowed points.bin is still in flight).
+    base += [f"--timeout={int(float(os.environ['REAL_TIME']) * 1000)}"] if os.environ.get("REAL_TIME") \
+        else ["--virtual-time-budget=9000"]
     return subprocess.run(base + args + [url], capture_output=True, text=True, timeout=120)
 
 
@@ -115,11 +125,11 @@ def shot(name, w, h, hsh="", scroll=0, port=None):
     Image.open(png).crop((0, 0, w, h)).save(png)            # keep exactly the emulated viewport
     dom = chrome([win, "--dump-dom"], url).stdout
     attrs = {k: (re.search(rf'data-{k}="([^"]*)"', dom) or [None, "?"])[1]
-             for k in ("status", "zoom", "hscroll", "zoomnote", "frame")}
+             for k in ("status", "zoom", "hscroll", "zoomnote", "frame", "point")}
     z = attrs["zoom"]
     print(f"{name:12s} {w}x{h:<5d} scroll={scroll:<4d} status={attrs['status']} "
           f"zoom={float(z):.2f} " if z not in ("?", "") else f"{name:12s} status={attrs['status']} ", end="")
-    print(f"hscroll={attrs['hscroll']} zoom-note={attrs['zoomnote']}  -> {png.name}")
+    print(f"hscroll={attrs['hscroll']} zoom-note={attrs['zoomnote']} point={attrs['point']!r}  -> {png.name}")
     return attrs
 
 
