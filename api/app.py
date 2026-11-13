@@ -8,6 +8,7 @@ Run locally:  uvicorn app:app --port 7860   (on Render: --host 0.0.0.0 --port $P
 """
 from __future__ import annotations
 
+import hmac
 import os
 import threading
 import time
@@ -16,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -28,7 +29,8 @@ SITE_URL = os.environ.get("SITE_URL", "https://shuvbytes.github.io/quest-precip"
 DATA_DIR = os.environ.get("DATA_DIR")              # tests / local runs: a folder with manifest.json + points.bin
 # A check is a conditional GET (ETag), normally "304 Not Modified"; 60 s keeps the API close behind a new deploy.
 CHECK_EVERY_S = float(os.environ.get("CHECK_EVERY_S", "60"))
-FORCED_CHECK_GAP_S = 15         # /health?check=1 at most this often
+FORCED_CHECK_GAP_S = 15         # POST /refresh checks at most this often
+MIN_TOKEN_LEN = 32              # a shorter REFRESH_TOKEN counts as not set (POST /refresh disabled)
 ALLOWED_ORIGINS = ["https://shuvbytes.github.io"]  # the site; browsers elsewhere get no CORS header
 
 
@@ -134,20 +136,39 @@ def root():
     return RedirectResponse("/docs")
 
 
-@app.get("/health", summary="Is the forecast loaded, and which run?")
-def health(background: BackgroundTasks,
-           check: bool = Query(False, description="Look for a newer build now (used after each site deploy)")):
-    if check and time.time() - store.last_check > FORCED_CHECK_GAP_S:
-        store.refresh()                                     # synchronous, so this answer shows the result
-    else:
-        store.maybe_refresh(background)
+def _state(**extra):
     base = {"source": DATA_DIR and "local files" or SITE_URL, "last_check_utc": store.last_check_utc,
             "last_error": store.last_error}
     if not store.data:
-        return JSONResponse(status_code=503, content={"status": "loading", **base})
+        return JSONResponse(status_code=503, content={"status": "loading", **base, **extra})
     m = store.data[0]
     return {"status": "ok", "run_utc": m["run"]["utc"], "run_ist": m["run"]["ist"],
-            "generated_utc": m["generated_utc"], "loaded_at_utc": store.loaded_at, **base}
+            "generated_utc": m["generated_utc"], "loaded_at_utc": store.loaded_at, **base, **extra}
+
+
+@app.get("/health", summary="Is the forecast loaded, and which run?")
+def health(background: BackgroundTasks):
+    """Read-only. Also starts the regular background check if the last one is older than 60 s."""
+    store.maybe_refresh(background)
+    return _state()
+
+
+# Called by the site's deploy workflow only, so the API loads a new build at once instead of within 60 s.
+# Bearer token = env REFRESH_TOKEN (set in Render's dashboard; GitHub secret API_REFRESH_TOKEN on the caller's side).
+# Not in /docs. Even with the token it only makes the API re-read the fixed SITE_URL, at most every 15 s.
+@app.post("/refresh", include_in_schema=False)
+def refresh(authorization: str | None = Header(None)):
+    token = os.environ.get("REFRESH_TOKEN", "")
+    if len(token) < MIN_TOKEN_LEN:
+        return _error(503, "refresh_disabled", "Refresh is not configured on this server.")
+    given = authorization[7:].strip() if authorization and authorization.startswith("Bearer ") else ""
+    if not hmac.compare_digest(given.encode(), token.encode()):    # constant-time comparison
+        return JSONResponse(status_code=401, headers={"WWW-Authenticate": "Bearer"},
+                            content={"error": "unauthorized", "message": "A valid bearer token is required."})
+    checked = time.time() - store.last_check > FORCED_CHECK_GAP_S
+    if checked:
+        store.refresh()                                   # synchronous, so this answer shows the result
+    return _state(checked_now=checked)
 
 
 @app.get("/point", summary="Forecast at the nearest grid point")

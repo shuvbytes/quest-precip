@@ -175,16 +175,58 @@ def test_api_reloads_when_a_new_build_appears(client):
     assert client.get("/health").json()["run_utc"] == "2099-01-01T00:00Z"
 
 
-def test_api_forced_check_loads_a_new_build_at_once(client):
-    """/health?check=1 (called after each site deploy) loads a newer build in the same request."""
+TOKEN = "t" * 40
+
+
+def _new_build(client, stamp):
     import json
-    import app as api
     f = client.data_dir / "manifest.json"
     m = json.loads(f.read_text())
-    m["generated_utc"] = "2099-02-02T00:00Z"
+    m["generated_utc"] = stamp
     f.write_text(json.dumps(m))
-    api.store.last_check -= 60                         # outside the 15 s gap between forced checks
-    assert client.get("/health", params={"check": 1}).json()["generated_utc"] == "2099-02-02T00:00Z"
+
+
+def test_health_no_longer_forces_a_check(client):
+    """The old /health?check=1 is gone: the parameter is ignored, so anyone calling it triggers nothing extra."""
+    import app as api
+    _new_build(client, "2099-03-03T00:00Z")
+    api.store.last_check = __import__("time").time()          # a regular check just happened
+    assert client.get("/health", params={"check": 1}).json()["generated_utc"] != "2099-03-03T00:00Z"
+
+
+def test_refresh_disabled_without_a_server_token(client, monkeypatch):
+    monkeypatch.delenv("REFRESH_TOKEN", raising=False)
+    assert client.post("/refresh", headers={"Authorization": f"Bearer {TOKEN}"}).status_code == 503
+    monkeypatch.setenv("REFRESH_TOKEN", "short")                # too short counts as not set
+    assert client.post("/refresh", headers={"Authorization": "Bearer short"}).status_code == 503
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer wrong"}, {"Authorization": TOKEN},
+                                     {"Authorization": f"Basic {TOKEN}"}, {"Authorization": f"Bearer {TOKEN}x"}])
+def test_refresh_rejects_missing_or_wrong_token(client, monkeypatch, headers):
+    import app as api
+    monkeypatch.setenv("REFRESH_TOKEN", TOKEN)
+    _new_build(client, "2099-04-04T00:00Z")
+    api.store.last_check -= 60
+    r = client.post("/refresh", headers=headers)
+    assert r.status_code == 401 and r.headers["www-authenticate"] == "Bearer"
+    assert api.store.data[0]["generated_utc"] != "2099-04-04T00:00Z"     # nothing was loaded
+
+
+def test_refresh_with_token_loads_a_new_build_at_once(client, monkeypatch):
+    import app as api
+    monkeypatch.setenv("REFRESH_TOKEN", TOKEN)
+    _new_build(client, "2099-02-02T00:00Z")
+    api.store.last_check -= 60                                  # outside the 15 s gap between forced checks
+    r = client.post("/refresh", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert r.status_code == 200 and r.json()["generated_utc"] == "2099-02-02T00:00Z" and r.json()["checked_now"]
+    r = client.post("/refresh", headers={"Authorization": f"Bearer {TOKEN}"})   # again at once: rate-limited
+    assert r.status_code == 200 and r.json()["checked_now"] is False
+
+
+def test_refresh_not_in_docs_and_not_a_get(client):
+    assert "/refresh" not in client.get("/openapi.json").json()["paths"]
+    assert client.get("/refresh").status_code == 405
 
 
 def test_api_gzips_point_answers(client):

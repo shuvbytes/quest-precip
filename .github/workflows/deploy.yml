@@ -122,11 +122,19 @@ jobs:
       # Make the point API (Render free web service) load the build just deployed: ask it to check now, repeatedly,
       # until it reports this build (covers CDN delay and a sleeping service, ~1 min to wake). Until then the page
       # rejects the API's answers as "different build" and uses points.bin. Never fails the deploy.
+      # POST /refresh needs the bearer token (repository secret API_REFRESH_TOKEN = Render env REFRESH_TOKEN); GitHub
+      # masks it in logs. Without the secret this step is skipped and the API's own 60 s checks pick up the build.
       - name: Point API loads the new build
+        env:
+          TOKEN: ${{ secrets.API_REFRESH_TOKEN }}
         run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::API_REFRESH_TOKEN not set; the API will find the new build within its 60 s check."
+            exit 0
+          fi
           want="${{ needs.build.outputs.generated }}"
           for i in $(seq 1 12); do
-            got=$(curl -sS --max-time 120 "https://quest-precip-api.onrender.com/health?check=1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('generated_utc'))" 2>/dev/null)
+            got=$(curl -sS --max-time 120 -X POST -H "Authorization: Bearer $TOKEN" "https://quest-precip-api.onrender.com/refresh" | python3 -c "import json,sys; print(json.load(sys.stdin).get('generated_utc'))" 2>/dev/null)
             echo "try $i: API has build $got, site has $want"
             [ "$got" = "$want" ] && break
             sleep 20

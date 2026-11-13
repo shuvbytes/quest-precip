@@ -8,6 +8,9 @@ on the map: https://shuvbytes.github.io/quest-precip/
 - `GET /point?lat=&lon=[&x=10][&t=0]`: `x` = threshold (mm) and `t` = window start hour, for the `summary` block.
 - `GET /health`: which forecast run is loaded (503 while loading).
 - `/docs`: interactive documentation.
+- `POST /refresh` (not in /docs): used by the site's deploy workflow to load a new build at once. Requires
+  `Authorization: Bearer <REFRESH_TOKEN>` (env var on Render, ≥ 32 characters; disabled if unset). Without it the API
+  still finds a new build within 60 s on its own.
 
 Data: read from the site above (`data/manifest.json`, `data/points.bin`) and refreshed when a new run is published.
 Only https://shuvbytes.github.io may call it from a browser (CORS).
