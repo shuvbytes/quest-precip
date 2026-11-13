@@ -321,6 +321,11 @@ Changes after the user's review (13 Nov):
   `#mode=24h&fill=chance&x=100&t=60` opens with "Sun 15 Nov 05:30 IST → Mon 16 Nov 05:30 IST". Private-window check
   (does the "Ignored an error…" warning disappear, i.e. was it an extension?) **not yet reported**, so the original
   source of "Script error." (extension vs stale cache) is unconfirmed. The fix covers both.
+- **User visual check (13 Nov), local server `python3 -m http.server 8000 --bind 127.0.0.1 --directory site_build`:**
+  all five check views (default; Bay ≥100 mm t=60; rain t=0 with fill toggle; 3 h t=33 with fast slider; zoom 7 drier dots
+  x=1 t=108) look correct and consistent with the expected labels. The browser's JavaScript console was **not** checked by
+  the user; headless Chrome shows status ready and no errors for the same five views. (`--directory` keeps the server
+  working when a rebuild deletes and recreates site_build/; a server started inside the old folder had stopped working.)
 - **Cache busting**: `build.copy_web` rewrites index.html links to `app.js?v=<sha256[:10]>` (also style.css, vendored
   Leaflet), so changed files always get new URLs; tested in `test_built_index_links_are_cache_busted`.
 Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/
