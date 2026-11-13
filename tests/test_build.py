@@ -60,23 +60,30 @@ def test_floors_and_files(built):
 
 
 def test_points_roundtrip(built):
-    """Decoding points.bin gives back the original values within 0.1 mm / 1 %."""
+    """Decoding points.bin gives back the original values within 0.1 mm / 1 %, and the 24 h array equals the map's
+    TP(t+24) - TP(t) rounded to 0.1 mm exactly (so panel, map and disagreement sentence show the same number)."""
     import numpy as np
     import xarray as xr
     from build import HRES_MAX_H, read_points
     from ens import read_region
-    from process import deaccumulate
+    from process import deaccumulate, window_totals
     from region import crop
     out, m = built
-    h, e = read_points(out / "points.bin", m["points"])
+    pts = read_points(out / "points.bin", m["points"])
+    assert [a["name"] for a in m["points"]["arrays"]] == ["hres_3h", "hres_24h", "ens_prob"]
     tp = crop(xr.open_dataset(HRES[-1], engine="cfgrib", backend_kwargs={"indexpath": ""})["tp"]).load()
     orig_h = deaccumulate(tp).mm.values
+    orig_w = window_totals(tp).mm.values
     p = read_region(str(ENS[-1]))
     orig_e = p.isel(window=np.where(p.end_h.values <= HRES_MAX_H)[0]).values
-    assert h.shape == orig_h.shape and e.shape == orig_e.shape
-    assert np.abs(h - orig_h).max() <= 0.1
-    assert np.abs(e - orig_e).max() <= 1.0
-    assert m["points"]["bytes"] == h.size * 2 + e.size
+    h, w, e = pts["hres_3h"], pts["hres_24h"], pts["ens_prob"]
+    assert h.shape == orig_h.shape and w.shape == orig_w.shape and e.shape == orig_e.shape
+    assert np.abs(h - orig_h).max() <= 0.05 + 1e-9          # rounding to 0.1 mm moves a value by at most 0.05
+    np.testing.assert_array_equal(np.round(w * 10), np.round(orig_w * 10))
+    assert np.abs(e - orig_e).max() <= 0.5 + 1e-9
+    assert m["points"]["bytes"] == h.size * 2 + w.size * 2 + e.size
+    offs = [a["offset"] for a in m["points"]["arrays"]]
+    assert offs == [0, h.size * 2, h.size * 2 + w.size * 2] and all(o % 2 == 0 for o in offs[:2])
 
 
 def test_disagreement_layer(built):

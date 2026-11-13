@@ -107,43 +107,54 @@ ATTRIBUTION = ("© European Centre for Medium-Range Weather Forecasts (ECMWF). S
                "ECMWF does not endorse it.")
 
 
-def write_points(three, p, out: Path):
-    """points.bin: HRES 3 h amounts as uint16 (0.1 mm units) then ENS probabilities as uint8 (%).
+def write_points(three, w, p, out: Path):
+    """points.bin, read by the point panel: named arrays back to back, little-endian, C order, no header.
 
-    Little-endian, C order, no header; the layout is described in the manifest ("points").
+    hres_3h  uint16, 0.1 mm  [48 frames, lat, lon]   3-hourly amounts (as on the map)
+    hres_24h uint16, 0.1 mm  [11 windows, lat, lon]  TP(t+24) - TP(t), exactly the map's 24 h values (user, 13 Nov:
+                                                     summing 3 h values could differ by up to 0.35 mm)
+    ens_prob uint8,  %       [7 thresholds, 11 windows, lat, lon]
+    Layout (offsets, shapes, scales) is described in the manifest ("points"); uint16 arrays come first so every
+    array starts at an aligned offset.
     """
-    h = np.round(three.mm.values * 10.0)
+    def enc16(mm):
+        v = np.round(np.asarray(mm) * 10.0)
+        if v.min() < 0 or v.max() > 65535:
+            raise ValueError("rain amount outside the uint16 0.1 mm range")
+        return v.astype("<u2")
+
     e = np.round(p.values)
-    if h.max() > 65535 or e.min() < 0 or e.max() > 100:
-        raise ValueError("value outside encodable range")
-    h16 = h.astype("<u2")
-    e8 = e.astype(np.uint8)
+    if e.min() < 0 or e.max() > 100:
+        raise ValueError("probability outside 0-100 %")
+    arrays = [
+        ("hres_3h", enc16(three.mm.values), 0.1, "mm", ["frame (= products.hres_3h.frames order)"]),
+        ("hres_24h", enc16(w.mm.values), 0.1, "mm", ["window (= products.hres_24h.frames order)"]),
+        ("ens_prob", e.astype(np.uint8), 1, "%", ["threshold (= products.ens_prob.thresholds_mm order)",
+                                                  "window (= frames_by_threshold order)"]),
+    ]
     path = out / "points.bin"
+    entries, offset = [], 0
     with open(path, "wb") as f:
-        f.write(h16.tobytes(order="C"))
-        f.write(e8.tobytes(order="C"))
-    entry = {
-        "file": "points.bin", "byte_order": "little", "bytes": path.stat().st_size,
-        "load": "lazily, on the first click",
-        "arrays": [
-            {"name": "hres_3h", "dtype": "uint16", "scale": 0.1, "units": "mm", "offset": 0,
-             "shape": list(h16.shape), "dims": ["frame (= products.hres_3h.frames order)", "lat (north→south)", "lon (west→east)"]},
-            {"name": "ens_prob", "dtype": "uint8", "scale": 1, "units": "%", "offset": h16.nbytes,
-             "shape": list(e8.shape),
-             "dims": ["threshold (= products.ens_prob.thresholds_mm order)",
-                      "window (= frames_by_threshold order)", "lat (north→south)", "lon (west→east)"]},
-        ],
-    }
+        for name, a, scale, units, lead_dims in arrays:
+            f.write(a.tobytes(order="C"))
+            entries.append({"name": name, "dtype": "uint16" if a.dtype.itemsize == 2 else "uint8", "scale": scale,
+                            "units": units, "offset": offset, "shape": list(a.shape),
+                            "dims": lead_dims + ["lat (north→south)", "lon (west→east)"]})
+            offset += a.nbytes
+    entry = {"file": "points.bin", "byte_order": "little", "bytes": path.stat().st_size,
+             "load": "lazily, on the first click", "arrays": entries}
     return path, entry
 
 
 def read_points(path: Path, entry):
-    """Decode points.bin back to (hres_3h mm, ens %) — the same steps the browser will do."""
+    """Decode points.bin into {name: array in its units} — the same steps the browser does."""
     raw = Path(path).read_bytes()
-    a, b = entry["arrays"]
-    h = np.frombuffer(raw, "<u2", count=int(np.prod(a["shape"])), offset=a["offset"]).reshape(a["shape"]) * a["scale"]
-    e = np.frombuffer(raw, np.uint8, count=int(np.prod(b["shape"])), offset=b["offset"]).reshape(b["shape"]) * b["scale"]
-    return h, e
+    out = {}
+    for a in entry["arrays"]:
+        dt = "<u2" if a["dtype"] == "uint16" else np.uint8
+        out[a["name"]] = (np.frombuffer(raw, dt, count=int(np.prod(a["shape"])), offset=a["offset"])
+                          .reshape(a["shape"]) * a["scale"])
+    return out
 
 
 def _iso(t):
@@ -265,7 +276,7 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
     out = Path(out)
     tp, p, base, packs = load(hres_path, ens_path)
     grid, three, w, frames = render_frames(tp, p, packs, out)
-    ppath, pentry = write_points(three, p, out)
+    ppath, pentry = write_points(three, w, p, out)
     mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out, points=pentry)
     print(f"wrote {mpath} ({mpath.stat().st_size / 1e3:.1f} kB)")
     print(f"wrote {ppath} ({ppath.stat().st_size:,} bytes)")
