@@ -74,10 +74,12 @@ body {
 .t-lead { margin: 0; font-size: 0.78rem; color: var(--ink-3); }
 
 /* ---------- On-map labels ---------- */
-.showing { position: absolute; z-index: 800; top: 10px; left: 56px; right: 10px; pointer-events: none; }
+/* Both labels in one stacked container, so a wrapped "Showing" line can never be covered by the note */
+.map-labels { position: absolute; z-index: 800; top: 10px; left: 56px; right: 10px; pointer-events: none;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .showing span { display: inline-block; background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line);
   border-radius: 6px; padding: 5px 9px; font-size: 0.85rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.zoom-note { position: absolute; z-index: 800; top: 48px; left: 56px; background: var(--amber-bg); color: var(--amber-ink);
+.zoom-note { background: var(--amber-bg); color: var(--amber-ink);
   border: 1px solid #e8cf86; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; font-weight: 600;
   box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .zoom-note[hidden] { display: none; }
@@ -98,3 +100,22 @@ body {
 .legend .hatch-key li { grid-column: 1 / -1; align-items: flex-start; }
 .sw-wet { background: repeating-linear-gradient(135deg, #111 0 2px, #fff 2px 3px, transparent 3px 6px), #e9b9d3; }
 .sw-dry { background: radial-gradient(circle, #111 0 3px, #fff 3px 4.5px, transparent 4.5px), #b73589; }
+
+/* ---------- Phone width: map on top, controls and legend stacked below ---------- */
+@media (max-width: 700px) {
+  html, body { height: auto; }          /* let the page grow: map, then controls, then footer */
+  body { min-height: 0; }
+  .top { padding: 8px 12px 6px; }
+  .top h1 { font-size: 1.02rem; }
+  .run { font-size: 0.78rem; }
+  .layout { flex-direction: column; }
+  .map-wrap { flex: none; height: 62vh; min-height: 320px; }
+  .panel { width: 100%; border-left: 0; border-top: 1px solid var(--line); overflow: visible; padding: 10px 12px 14px; }
+  .map-labels { left: 50px; top: 8px; right: 8px; gap: 5px; }
+  .showing span { font-size: 0.76rem; padding: 4px 7px; }
+  .zoom-note { font-size: 0.78rem; padding: 5px 8px; }
+  .seg button, .time-row button { min-height: 44px; }          /* comfortable touch targets */
+  .time-row button { width: 44px; }
+  .row select { min-height: 36px; }
+  .foot { padding: 8px 12px 12px; }
+}

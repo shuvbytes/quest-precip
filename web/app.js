@@ -26,7 +26,7 @@ async function getJSON(url) {
 
 function makeMap(m) {
   const map = L.map("map", {
-    zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 4, maxZoom: 9,
+    zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 3, maxZoom: 9,   // 3: a phone needs ~3.9 to fit the region
     attributionControl: false,              // full attribution is in the footer
   });
   // Draw order (bottom -> top): land fill, rain/chance image, disagreement hatch, coast + India boundary lines.
@@ -280,6 +280,9 @@ function render(app) {
   document.body.dataset.frame = f.file + (hatchFile ? " + " + hatchFile : "");
   writeHash();
   preload(frames, k);
+  // For checks: does the page scroll sideways? (must be "false" at phone width)
+  document.body.dataset.hscroll = document.documentElement.scrollWidth > window.innerWidth;
+  document.body.dataset.zoom = map.getZoom();
 }
 
 const cache = new Map();
@@ -329,7 +332,8 @@ async function main() {
   const m = await getJSON(DATA + "manifest.json");
   const view = readHash(m);
   const map = makeMap(m);
-  if (view) map.setView(view.center, view.zoom);
+  // No animation: the zoom must be final before the first render picks fine/bold marks and the zoom note.
+  if (view) map.setView(view.center, view.zoom, { animate: false });
   await addBasemap(map, m);
   const opts = { pane: "fill", className: "px", interactive: false };
   const fill = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds, opts).addTo(map);
