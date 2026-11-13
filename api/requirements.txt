@@ -1,0 +1,5 @@
+# Same versions as the tested conda env (tests/test_api.py runs in CI with these).
+fastapi==0.162.5
+uvicorn==0.54.0
+httpx==0.28.1
+numpy==2.4.6
