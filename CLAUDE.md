@@ -161,11 +161,12 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (end of 12 Nov, ~late night; user stopped for the night, M5 NOT started)
-**M0–M4 done, including the disagreement layer; 36 tests passing.** Backed up to GitHub:
-**https://github.com/shuvbytes/quest-precip** (private, branch `main`, tracking `origin/main`).
-Pages is not enabled yet (M7). Before making the repo public, re-check the tracked files (32 files, 527 kB on
-12 Nov; only image = validation figure).
+## Status (13 Nov, afternoon IST): M0–M5 done; M6 next
+**M0–M5 done; 41 tests passing.** The map page runs locally and was checked by the user in Safari (all five check
+views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
+**https://github.com/shuvbytes/quest-precip** (private, branch `main`). Pages not enabled yet (M7).
+Before making the repo public, re-check tracked files (now also `web/`, incl. vendored Leaflet + source map).
+Local server for checks: `python3 -m http.server 8000 --bind 127.0.0.1 --directory site_build` → http://127.0.0.1:8000/.
 
 Earlier review questions, all resolved:
 - ECMWF chart comparison: no bugs; 0.25° values are point samples (`docs/validation/`).
@@ -198,6 +199,14 @@ Commits so far:
 | `e764ff8` | Whole centred "drier" dots; check figure |
 | `8c98bd6`, `ac7a884` | Disagreement review numbers; zoom-6 decision |
 | `1b85ed0` | Map min cluster 3; point panel keeps all flags; zoom note (pushed to GitHub) |
+| `a9202a9`, `7d67c79` | Robustness check on 12z run; validation note: Bay system 00z vs 12z in valid time |
+| `682f4cd` … `fdadb00` | M5 steps 1–5: basemap layers, page skeleton, controls, header/legend/footer, phone layout |
+| `9b98148` | URL-hash updates throttled (Safari replaceState limit); banner only for load failures |
+| `3ab0485` | Leaflet vendored (no CDN) after a Safari "can't find variable: L" failure |
+| `0a60714` | Forecast-area edge: outside veil, subtler line, following labels |
+| `fff79a2` | Cream land #fdf8ee; "Script error." banner fix; cache-busted asset links |
+| `3482679`, `b9a11e1` | Vendored leaflet.js.map; ignored-error warning shows file/line |
+| `42a3b24` + this commit | M5 closed; status updated and pushed to GitHub (13 Nov) |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
