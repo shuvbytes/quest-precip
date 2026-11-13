@@ -165,7 +165,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 **M0–M7 done; 42 tests passing; repo public; site deployed by GitHub Actions (see M7 section).**
 **Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
 slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
-both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check: user testing now, report pending. Earlier (evening): M6 closed by the user after confirming
+both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check (Android Chrome): portrait OK; landscape poor → M8 item D. Earlier (evening): M6 closed by the user after confirming
 both keyboard fixes in Safari (the ring lands on the crosshair). Earlier (afternoon): M0–M5 done. The map page runs locally and was checked by the user in Safari (all five check
 views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
 **https://github.com/shuvbytes/quest-precip** (public since 13 Nov, branch `main`).
@@ -429,6 +429,18 @@ Alt = one grid point scheme (`191cbe7`)
 4. Tests: every grid point reachable (edges + corners, fitted zoom and zoom 7, desktop + phone, as `m5_screens.py edges` /
    `targets`), Enter selects the grid point under the crosshair.
 
+**D. Short screens / landscape phones** (user's Android Chrome test, 13 Nov night: portrait OK; landscape poor: map
+under half the height while the attribution footer took almost as much; "Showing", zoom note, zoom buttons and edge labels
+crowd the small map, and the left edge label overlaps "Showing"; point panel clipped mid-line; mode/slider controls not
+visible; header scrolled away; region does not fit). Build after A and B:
+1. Layout for short heights (e.g. `max-height: 500px` / landscape): map uses the full height, the panel beside it scrolls
+   on its own, and the controls are reachable without scrolling the page.
+2. Footer collapses on small screens into a short attribution line + "About & sources" link/drawer (ECMWF CC BY 4.0
+   attribution must stay visible).
+3. Smaller, non-overlapping overlays on short screens; the zoom note must not cover the map.
+4. Test at 390×844 portrait and 844×390 landscape with screenshots (`m5_screens.py`), plus no page scroll sideways,
+   region fits, panel and controls reachable.
+
 **C. Polish**
 1. Hatch stripes look jagged/staircased at max zoom (raster PNG stretched, `pixelated`): consider vector hatching, e.g. an
    SVG pattern built in the browser from the manifest's flagged-cell lists (map clusters ≥ 3 only), crisp at any zoom.
@@ -463,9 +475,9 @@ Alt = one grid point scheme (`191cbe7`)
   fields exact; the dry central-India capture always snapshotted mid-download (test timing, not an app error).
 
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
-0. Act on the user's phone-test report; check the first scheduled run (20:23 UTC 13 Nov → 12z run) succeeded/skipped.
+0. Check the first scheduled run (20:23 UTC 13 Nov → 12z run) succeeded/skipped.
 1. **M8 A + B**: place names (cities, country labels, state lines, local search, "Near <city>") and grid-step keyboard
-   navigation with live readout.
+   navigation with live readout; then **M8 D** (short screens / landscape phones).
 2. **M7b** FastAPI `/point` (HF Spaces, Render fallback; browser lookup stays as fallback).
 3. **M8 C**: point card, then README (vector hatch if time).
 4. IMD-day view only if all of the above is done; 15 Nov buffer only.
