@@ -27,7 +27,13 @@ function isOwnScriptError(e) {
 window.addEventListener("error", (e) => {
   const own = isOwnScriptError(e);
   document.body.dataset.lasterror = (own ? "" : "[other origin] ") + e.message;
-  if (!own) { console.warn("Ignored an error from a script that is not part of this page:", e.message); return; }
+  if (!own) {
+    // Everything the browser reveals about it: an empty file name means the browser hid it (another origin).
+    console.warn("Ignored an error from a script that is not part of this page:", e.message,
+      `| file: ${e.filename || "(hidden by the browser: not this site)"} | line ${e.lineno || "?"}:${e.colno || "?"}` +
+      ` | this page's scripts: ${[...document.scripts].map((x) => x.src || "(inline)").join(", ")}`);
+    return;
+  }
   if (document.body.dataset.status === "ready") console.error(e.error || e.message);
   else showError(e.message);
 });
