@@ -10,6 +10,7 @@ Usage: python pipeline/m5_screens.py name=WxH[#hash][@scrollY] ...
 from __future__ import annotations
 
 import functools
+import json
 import http.server
 import os
 import re
@@ -205,6 +206,94 @@ f.addEventListener("load", go);
 </script></body></html>"""
 
 
+# Edge reach: from the fitted view or zoom 7, hold Shift+arrows toward each edge/corner until nothing moves, Enter, and
+# report the selected grid point and whether it is the grid point nearest the crosshair centre.
+EDGES = """<!doctype html><html><body data-status="loading" style="margin:0"><iframe id="f" src="index.html#{hash}" style="width:{w}px;height:{h}px;border:0"></iframe>
+<script>
+const f = document.getElementById("f"); const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const DIRS = {{ S: ["ArrowDown"], N: ["ArrowUp"], W: ["ArrowLeft"], E: ["ArrowRight"],
+  SW: ["ArrowDown", "ArrowLeft"], SE: ["ArrowDown", "ArrowRight"], NW: ["ArrowUp", "ArrowLeft"], NE: ["ArrowUp", "ArrowRight"] }};
+async function go() {{
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready" || !w.__rainOutlook) return setTimeout(go, 100);
+  const map = w.__rainOutlook.map, mc = d.getElementById("map"), out = [];
+  const key = (k, shift) => mc.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: k, shiftKey: !!shift, bubbles: true }}));
+  const crossLL = () => {{ const cr = d.getElementById("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
+    return map.containerPointToLatLng([cr.left + cr.width / 2 - mr.left, cr.top + cr.height / 2 - mr.top]); }};
+  const view = map.getCenter(), z0 = map.getZoom();
+  for (const [name, keys] of Object.entries(DIRS)) {{
+    map.setView(view, z0, {{ animate: false }});
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));
+    d.body.dispatchEvent(new w.PointerEvent("pointerdown", {{ bubbles: true }}));   // reset the crosshair to the centre
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));
+    mc.blur(); mc.focus();
+    let prev = "", presses = 0;
+    for (let i = 0; i < 400; i++) {{
+      for (const k of keys) key(k, true);
+      presses++;
+      const c = crossLL(), now = c.lat.toFixed(5) + "," + c.lng.toFixed(5) + "," + map.getCenter().lat.toFixed(5);
+      if (now === prev) break; prev = now;
+    }}
+    const c = crossLL();
+    key("Enter");
+    await sleep(150);
+    const title = d.getElementById("point-title").textContent;
+    const g = w.__rainOutlook.map && title.match(/([\d.]+)°N, ([\d.]+)°E/);
+    const nearest = [(38 - Math.round((38 - c.lat) / 0.25) * 0.25).toFixed(2), (65 + Math.round((c.lng - 65) / 0.25) * 0.25).toFixed(2)];
+    const ringPx = g ? map.latLngToContainerPoint([+g[1], +g[2]]).distanceTo(map.latLngToContainerPoint(c)) : NaN;
+    const cellPx = map.latLngToContainerPoint([c.lat, c.lng]).distanceTo(map.latLngToContainerPoint([c.lat + 0.125, c.lng + 0.125]));
+    out.push(`${{name}}|${{g ? g[1] + "," + g[2] : "none"}}|${{nearest.join(",")}}|${{presses}}|${{ringPx.toFixed(1)}}|${{cellPx.toFixed(1)}}|${{map.getZoom()}}`);
+  }}
+  document.body.dataset.result = out.join(";"); document.body.dataset.status = "done";
+}}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
+# Reach named places by keyboard only: big steps (Shift+arrow), then 80 px steps, then Alt+arrow grid steps, then Enter.
+TARGETS = """<!doctype html><html><body data-status="loading" style="margin:0"><iframe id="f" src="index.html#{hash}" style="width:{w}px;height:{h}px;border:0"></iframe>
+<script>
+const f = document.getElementById("f"); const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PLACES = {places};
+async function go() {{
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready" || !w.__rainOutlook) return setTimeout(go, 100);
+  const map = w.__rainOutlook.map, mc = d.getElementById("map"), out = [];
+  const key = (k, mods) => mc.dispatchEvent(new w.KeyboardEvent("keydown", Object.assign({{ key: k, bubbles: true }}, mods || {{}})));
+  const crossPx = () => {{ const cr = d.getElementById("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
+    return w.L.point(cr.left + cr.width / 2 - mr.left, cr.top + cr.height / 2 - mr.top); }};
+  const view = map.getCenter(), z0 = map.getZoom();
+  for (const [name, lat, lon] of PLACES) {{
+    map.setView(view, z0, {{ animate: false }});
+    d.body.dispatchEvent(new w.PointerEvent("pointerdown", {{ bubbles: true }}));      // crosshair back to centre
+    d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }})); mc.blur(); mc.focus();
+    const tr = Math.round((38 - lat) / 0.25), tc = Math.round((lon - 65) / 0.25);
+    const target = [38 - tr * 0.25, 65 + tc * 0.25];
+    let presses = 0;
+    for (let i = 0; i < 300; i++) {{
+      const here = map.containerPointToLatLng(crossPx());
+      const r = Math.round((38 - here.lat) / 0.25), c = Math.round((here.lng - 65) / 0.25);
+      if (r === tr && c === tc) break;
+      const tp = map.latLngToContainerPoint(target), cp = crossPx(), dx = tp.x - cp.x, dy = tp.y - cp.y;
+      const ax = Math.abs(dx) >= Math.abs(dy), dist = Math.abs(ax ? dx : dy), sgn = Math.sign(ax ? dx : dy);
+      const k = ax ? (sgn > 0 ? "ArrowRight" : "ArrowLeft") : (sgn > 0 ? "ArrowDown" : "ArrowUp");
+      if (ax ? c === tc : r === tr) {{ key(ax ? (r < tr ? "ArrowDown" : "ArrowUp") : (c < tc ? "ArrowRight" : "ArrowLeft"), {{ altKey: true }}); }}
+      else if (dist > 300) key(k, {{ shiftKey: true }});
+      else if (dist > 100) key(k);
+      else key(k, {{ altKey: true }});
+      presses++;
+    }}
+    key("Enter");
+    await sleep(150);
+    const t = d.getElementById("point-title").textContent;
+    out.push(`${{name}}|${{t}}|${{target[0].toFixed(2)}}N ${{target[1].toFixed(2)}}E|${{presses}}`);
+  }}
+  document.body.dataset.result = out.join(";"); document.body.dataset.status = "done";
+}}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -218,6 +307,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        if u.path == "/__targets.html":
+            places = json.dumps([["Kanyakumari", 8.0883, 77.5385], ["Sri Lanka S tip (Dondra Head)", 5.9227, 80.5895],
+                                 ["Southern Bay", 6.0, 88.0], ["Jaffna", 9.66, 80.01], ["Gilgit (far north)", 35.92, 74.31],
+                                 ["Andaman (Port Blair)", 11.62, 92.72], ["Karachi (west)", 24.86, 67.0]])
+            return self._send(TARGETS.format(hash=q.get("hash", ["mode=3h&t=33"])[0], w=int(q.get("w", ["1440"])[0]),
+                                             h=int(q.get("h", ["900"])[0]), places=places).encode())
+        if u.path == "/__edges.html":
+            return self._send(EDGES.format(hash=q.get("hash", ["mode=3h&t=33"])[0], w=int(q.get("w", ["1440"])[0]),
+                                           h=int(q.get("h", ["900"])[0])).encode())
         if u.path == "/__aim.html":
             return self._send(AIM.format(hash=q.get("hash", ["mode=3h&t=33"])[0], w=int(q.get("w", ["1440"])[0]),
                                          h=int(q.get("h", ["900"])[0])).encode())
@@ -315,6 +413,68 @@ def crosshair():
     print("crosshair:\n  " + "\n  ".join(res.split(" | ")))
 
 
+def targets():
+    """Reach named places near the edges by keyboard only (Shift/plain/Alt arrows), Enter, check the grid point."""
+    os.environ.setdefault("VTB", "60000")
+    httpd, port = serve()
+    ok_all = True
+    try:
+        for w, h in [(1440, 900), (390, 844)]:
+            for label, hsh in [("fitted", "mode=3h&t=33"), ("zoom 7", "mode=3h&t=33&z=7&c=20,80")]:
+                url = f"http://127.0.0.1:{port}/__targets.html?" + urllib.parse.urlencode({"hash": hsh, "w": w, "h": h})
+                dom = chrome([f"--window-size={max(w, 520) + 20},{h + 20}", "--dump-dom"], url).stdout
+                res = (re.search(r'data-result="([^"]*)"', dom) or [None, ""])[1]
+                print(f"{w}x{h} {label}:")
+                for row in filter(None, res.split(";")):
+                    name, title, target, presses = row.split("|")
+                    ok = title == f"Grid point {target.replace('N', '°N,').replace('E', '°E')}"
+                    ok_all &= ok
+                    print(f"  {'OK ' if ok else 'BAD'} {name:30s} target {target:16s} panel: {title:30s} ({presses} key presses)")
+                if not res:
+                    ok_all = False
+                    print("  (no result)")
+    finally:
+        httpd.shutdown()
+    print("ALL TARGETS REACHED BY KEYBOARD" if ok_all else "FAIL")
+    return ok_all
+
+
+def edges():
+    """Every edge and corner of the forecast area must be reachable by keyboard, and Enter must select the grid point
+    nearest the crosshair. Fitted view and zoom 7, desktop and phone width."""
+    os.environ.setdefault("VTB", "60000")
+    expect = {"S": ("5.00", None), "N": ("38.00", None), "W": (None, "65.00"), "E": (None, "100.00"),
+              "SW": ("5.00", "65.00"), "SE": ("5.00", "100.00"), "NW": ("38.00", "65.00"), "NE": ("38.00", "100.00")}
+    httpd, port = serve()
+    ok_all = True
+    try:
+        for w, h in [(1440, 900), (390, 844)]:
+            for label, hsh in [("fitted", "mode=3h&t=33"), ("zoom 7", "mode=3h&t=33&z=7&c=20,80")]:
+                url = f"http://127.0.0.1:{port}/__edges.html?" + urllib.parse.urlencode({"hash": hsh, "w": w, "h": h})
+                dom = chrome([f"--window-size={max(w, 520) + 20},{h + 20}", "--dump-dom"], url).stdout
+                res = (re.search(r'data-result="([^"]*)"', dom) or [None, ""])[1]
+                print(f"{w}x{h} {label}:")
+                for row in filter(None, res.split(";")):
+                    name, sel, near, presses, ring, cell, z = row.split("|")
+                    lat, lon = (sel.split(",") + [None])[:2]
+                    el, eo = expect[name]
+                    reach = (el is None or lat == el) and (eo is None or lon == eo)
+                    nearest = sel == near
+                    ok = reach and nearest and float(ring) <= float(cell) + 0.5
+                    ok_all &= ok
+                    print(f"  {name:2s} {'OK ' if ok else 'BAD'} selected {sel:13s} (expected edge {el or '-'}N/{eo or '-'}E: "
+                          f"{'reached' if reach else 'NOT reached'}); nearest grid point to crosshair {near} "
+                          f"{'=' if nearest else '!='}; ring {ring} px from crosshair (half cell {cell} px); "
+                          f"{presses} Shift+arrow presses; zoom {float(z):.2f}")
+                if not res:
+                    ok_all = False
+                    print("  (no result)")
+    finally:
+        httpd.shutdown()
+    print("ALL EDGES AND CORNERS REACHABLE, NEAREST GRID POINT SELECTED" if ok_all else "FAIL")
+    return ok_all
+
+
 def aim():
     """Crosshair accuracy across window sizes and zooms; prints the offset in CSS px (must be <= 1)."""
     os.environ.setdefault("VTB", "60000")          # waits for data and pans step by step (simulated clock)
@@ -354,6 +514,10 @@ def main(specs):
 if __name__ == "__main__":
     if sys.argv[1:2] == ["stress"]:
         stress(*sys.argv[2:3])
+    elif sys.argv[1:2] == ["targets"]:
+        sys.exit(0 if targets() else 1)
+    elif sys.argv[1:2] == ["edges"]:
+        sys.exit(0 if edges() else 1)
     elif sys.argv[1:2] == ["aim"]:
         sys.exit(0 if aim() else 1)
     elif sys.argv[1:2] == ["crosshair"]:

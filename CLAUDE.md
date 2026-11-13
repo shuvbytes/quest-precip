@@ -383,6 +383,16 @@ User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`,
   off (FAIL), fixed ≤ 0.7 px (PASS). Note: headless Chrome does not run Leaflet's own arrow-key pan animations, so the
   check moves the map by the same pixels directly; arrow-key panning itself was confirmed by the user in a real browser.
   `window.__rainOutlook = {map}` is exposed only for these dev checks.
+- **Keyboard reach (13 Nov, user report):** the crosshair stayed at the map centre, so where the map hit its pan limit
+  keyboard users could not reach anything within half a screen of the edges (e.g. stuck at ~11.5N). Now the page handles
+  the arrows itself (Leaflet's arrow handling bypassed): each press pans as far as allowed, and the remainder moves the
+  crosshair; moving back first re-centres the crosshair. Panning also stops where the forecast edge would pass the
+  crosshair (on a phone at zoom 7 the 5-deg pan margin had let the data leave the screen; crosshair ended at 101.25E).
+  The crosshair is clamped to the forecast area. Keys: arrow = 80 px, Shift+arrow = 240 px, **Alt/Option+arrow = next
+  grid point** (80 px can skip 0.25-deg cells), Enter selects, +/- zoom, Esc closes. Checks:
+  `m5_screens.py edges` — all 4 edges + 4 corners at the fitted zoom and zoom 7, 1440x900 and 390x844: 32/32 reached,
+  each selection = the grid point nearest the crosshair, ring within half a cell. `m5_screens.py targets` — Kanyakumari,
+  Sri Lanka S tip, southern Bay, Jaffna, Gilgit, Port Blair, Karachi reached by keyboard only: 28/28 exact grid points.
 - Table key line under the 24 h table was cut off at the left (a <caption> inside the sideways-scrolling box): now a
   visually hidden caption for screen readers + a visible line below the box.
 - **Open wording issue (needs the user's decision):** the approved "wetter" sentence ends "Heavy rain is possible,
