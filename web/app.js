@@ -645,7 +645,12 @@ function drawChart(app, container, val) {
 
   container.appendChild(el("p", "eyebrow", "Rain in each 3 hours (HRES), 0–" + frames[n - 1].end_h + " h"));
   if (Math.max(...shown) === 0) {
-    container.appendChild(el("p", "sub", `No 3-hour window reaches ${fmt(frames[0].lowest_drawn)} mm at this point.`));
+    // floors differ per window when ECMWF stores later steps more coarsely (floor_raised, e.g. 13 Nov 12z from +105 h)
+    const lo = Math.min(...frames.map((f) => f.lowest_drawn)), hi = Math.max(...frames.map((f) => f.lowest_drawn));
+    container.appendChild(el("p", "sub", lo === hi
+      ? `No 3-hour window reaches ${fmt(lo)} mm at this point.`
+      : `No 3-hour window reaches the lowest amount shown at this point (${fmt(lo)} mm; ${fmt(hi)} mm in windows ` +
+        `where the data is stored more coarsely).`));
   } else {
     container.appendChild(svg);
     container.appendChild(readout);

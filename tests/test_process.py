@@ -140,12 +140,21 @@ def test_lowest_visible_normal_and_raised():
 
 
 @pytest.mark.skipif(not list(RAW.glob("hres_tp_*.grib2")), reason="no real GRIB downloaded")
-def test_real_run_floors_below_legend():
+def test_real_run_floor_rule():
+    """Every frame of every downloaded run follows the display-floor rule (decided 12 Nov): it starts at the smallest
+    legend edge at or above its noise floor (2 x packing quantum), and is flagged 'raised' exactly when that is not the
+    first edge. (An older version asserted floors never exceed the first edge; the 13 Nov 12z run broke that: from
+    +105 h the quantum is 0.488 mm, floor 0.977 mm > 0.5 mm, so those 3 h frames start at 1 mm, flagged.)"""
     from packing import read_packing
-    path = sorted(RAW.glob("hres_tp_*.grib2"))[-1]
-    packs = read_packing(str(path))
-    steps = [p.step for p in packs]
-    f3 = interval_floor(packs, steps[:-1], steps[1:], "m")
-    starts = ens_window_starts(steps[-1])
-    f24 = interval_floor(packs, starts, starts + 24, "m")
-    assert f3.max() <= BINS_3H[0] and f24.max() <= BINS_24H[0]
+    from process import lowest_visible
+    for path in sorted(RAW.glob("hres_tp_*.grib2")):
+        packs = read_packing(str(path))
+        steps = [p.step for p in packs]
+        starts = ens_window_starts(steps[-1])
+        for bins, floors in ((BINS_3H, interval_floor(packs, steps[:-1], steps[1:], "m")),
+                             (BINS_24H, interval_floor(packs, starts, starts + 24, "m"))):
+            for fl in np.asarray(floors):
+                drawn, raised = lowest_visible(bins, float(fl))
+                assert drawn >= fl and drawn in bins
+                assert all(e < fl for e in bins if e < drawn)          # no smaller edge would have been safe
+                assert raised == (drawn != bins[0])
