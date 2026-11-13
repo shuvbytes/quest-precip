@@ -1,0 +1,51 @@
+/* India Rain Outlook. Colours for data come from manifest.json; these are page chrome only. */
+:root {
+  --ink: #1d1f23;
+  --ink-2: #4a4f57;
+  --ink-3: #6b717b;
+  --line: #d9dce1;
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --accent: #1f5fa8;
+  --amber-bg: #fff4d6;
+  --amber-ink: #6b4a00;
+  --radius: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.top { padding: 10px 16px 8px; border-bottom: 1px solid var(--line); }
+.top h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
+.run { margin: 2px 0 0; font-size: 0.85rem; color: var(--ink-2); }
+
+.layout { flex: 1; display: flex; min-height: 0; }
+.map-wrap { position: relative; flex: 1; min-width: 0; }
+#map { position: absolute; inset: 0; }
+.panel {
+  width: 340px; flex: none; overflow-y: auto;
+  background: var(--panel); border-left: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.foot {
+  padding: 8px 16px; font-size: 0.72rem; line-height: 1.4; color: var(--ink-3);
+  border-top: 1px solid var(--line);
+}
+.foot a { color: inherit; }
+
+/* Data images: keep each 0.25 deg grid cell a sharp square (no browser smoothing = no invented detail). */
+.leaflet-image-layer.px { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* Error banner shown if anything fails to load */
+.error { position: absolute; z-index: 1000; left: 12px; right: 12px; top: 12px;
+  background: #fde8e8; color: #7a1414; padding: 10px 12px; border-radius: var(--radius); font-size: 0.9rem; }

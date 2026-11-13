@@ -13,7 +13,8 @@ import xarray as xr
 
 from ens import read_region
 from packing import read_packing
-from palette import PROB, RAIN
+from palette import LAND, OCEAN, PROB, RAIN
+from region import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
 from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, interval_floor,
                      lowest_visible, window_totals)
 from region import crop
@@ -23,7 +24,9 @@ from render import Grid, render_hatch, render_png
 
 PROB_BINS = (2, 10, 25, 50, 75, 90, 100)
 HRES_MAX_H = 144
-OUT_DEFAULT = Path(__file__).resolve().parent.parent / "site_build" / "data"
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DEFAULT = ROOT / "site_build" / "data"
+WEB = ROOT / "web"
 
 
 def load(hres_path, ens_path):
@@ -168,6 +171,9 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
         "run": {"utc": _iso(base), "ist": ist_label(base), "model": "ECMWF IFS (HRES + ENS), Open Data 0.25°"},
         "generated_utc": _iso(generated_utc),
         "time_note": "All times computed in UTC from the GRIB reference time; IST = UTC+05:30, used for labels only.",
+        "region": {"lat_min": LAT_MIN, "lat_max": LAT_MAX, "lon_min": LON_MIN, "lon_max": LON_MAX},
+        "basemap": {"land": LAND, "sea": OCEAN,
+                    "note": "Colours from pipeline/palette.py; tests/test_palette.py checks the palest data colours against both."},
         "grid": {"lat_north": grid.lat_n, "lon_west": grid.lon_w, "dlat": grid.dlat, "dlon": grid.dlon,
                  "nlat": grid.nlat, "nlon": grid.nlon,
                  "value_meaning": "Model value at the nearest grid point (0.25°, ~25 km spacing). "
@@ -227,6 +233,13 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
     return path, m
 
 
+def copy_web(site_root: Path):
+    """The page (web/) goes next to data/, so site_root is the complete static site."""
+    import shutil
+    shutil.copytree(WEB, site_root, dirs_exist_ok=True)
+    return site_root
+
+
 def main(hres_path, ens_path, out=OUT_DEFAULT):
     out = Path(out)
     tp, p, base, packs = load(hres_path, ens_path)
@@ -235,6 +248,8 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
     mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out, points=pentry)
     print(f"wrote {mpath} ({mpath.stat().st_size / 1e3:.1f} kB)")
     print(f"wrote {ppath} ({ppath.stat().st_size:,} bytes)")
+    site = copy_web(out.parent)
+    print(f"copied web/ into {site}")
     print(f"Run {base:%Y-%m-%d %H:%M} UTC; grid {grid.nlat}x{grid.nlon}; image {grid.width}x{grid.height} px;"
           f" bounds {grid.bounds}")
     dis = frames["disagree"]

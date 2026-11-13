@@ -1,7 +1,8 @@
 """DEV-ONLY, run once: build the static basemap layers in web/geo/ (committed; not per-run data).
 
-- land.geojson: Natural Earth 10 m land (public domain), clipped to the region + 1 deg margin, simplified.
-  Drawn as the land fill; its outline is the coastline. No political borders.
+- land.geojson: Natural Earth 10 m land (public domain), clipped to the region + 6 deg margin, simplified.
+  Drawn as the land fill only (no outline). No political borders.
+- coastline.geojson: Natural Earth 10 m coastline lines (public domain), same clip; drawn as a thin line.
 - india-boundary.geojson: DataMeet `Country/india-composite.geojson` (India incl. disputed territories, "in
   accordance with" the Survey of India official boundary), simplified. Drawn as a line on top.
 Usage: python pipeline/make_geo.py
@@ -25,7 +26,7 @@ OUT = ROOT / "web" / "geo"
 DATAMEET_COMMIT = "b3fbbde595"      # pinned so the boundary cannot change silently
 DATAMEET_URL = f"https://raw.githubusercontent.com/datameet/maps/{DATAMEET_COMMIT}/Country/india-composite.geojson"
 DATAMEET_SHA256 = "5e44c39b18aa8fe57267d8018fa4ad4a10eaa3aa4cb7cb7382a1813ef8eb8c53"
-MARGIN = 1.0
+MARGIN = 6.0        # land drawn well beyond the data so panning never reaches its clipped edge
 TOL = 0.01          # simplification tolerance in degrees (~1 km); the rain cells are 0.25 deg (~28 km)
 DECIMALS = 3        # ~100 m
 
@@ -51,6 +52,13 @@ def main():
     land = _round(shapely.union_all(parts).simplify(TOL, preserve_topology=True))
     n_land = _write(land, OUT / "land.geojson", {"source": "Natural Earth 10m land (public domain)"})
 
+    # Coastline: Natural Earth 10 m coastline LINES. Using the land polygon's outline would also draw the
+    # clip edges as lines that look like borders.
+    coast_path = shpreader.natural_earth(resolution="10m", category="physical", name="coastline")
+    lines = [g.intersection(clip) for g in shpreader.Reader(coast_path).geometries() if g.intersects(clip)]
+    coast = _round(shapely.line_merge(shapely.union_all(lines)).simplify(TOL))
+    n_coast = _write(coast, OUT / "coastline.geojson", {"source": "Natural Earth 10m coastline (public domain)"})
+
     # India boundary: DataMeet india-composite, pinned commit + checksum
     src = SRC / "india-composite.geojson"
     if not src.exists():
@@ -66,7 +74,8 @@ def main():
                      {"source": "DataMeet India community, Country/india-composite.geojson "
                                 f"(commit {DATAMEET_COMMIT})"})
 
-    for name, geom, size in [("land.geojson", land, n_land), ("india-boundary.geojson", india, n_india)]:
+    for name, geom, size in [("land.geojson", land, n_land), ("coastline.geojson", coast, n_coast),
+                             ("india-boundary.geojson", india, n_india)]:
         print(f"{name:24s} {geom.geom_type:13s} parts {len(getattr(geom, 'geoms', [geom])):4d}  "
               f"vertices {shapely.get_num_coordinates(geom):6d}  bounds {[round(b, 2) for b in geom.bounds]}  "
               f"valid {geom.is_valid}  {size / 1e3:.1f} kB")

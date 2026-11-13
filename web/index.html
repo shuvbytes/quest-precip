@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>India Rain Outlook</title>
+  <meta name="description" content="ECMWF forecasts of rain over India and nearby seas: one detailed model run (HRES) next to the ensemble's chances (ENS), with exact IST time windows.">
+  <!-- Leaflet: pinned version from cdnjs; the integrity hash makes the browser refuse a modified file. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+        integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-status="loading">
+  <header class="top">
+    <h1>India Rain Outlook</h1>
+    <p class="run" id="run-line">Loading forecast…</p>
+  </header>
+
+  <main class="layout">
+    <section class="map-wrap" aria-label="Map">
+      <div id="map"></div>
+    </section>
+    <aside class="panel" id="panel" aria-label="Map controls and legend"></aside>
+  </main>
+
+  <footer class="foot" id="foot"></footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+          integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="app.js"></script>
+</body>
+</html>

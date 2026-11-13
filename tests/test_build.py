@@ -14,7 +14,7 @@ def built(tmp_path_factory):
     import io
     from contextlib import redirect_stdout
     from build import main
-    out = tmp_path_factory.mktemp("site")
+    out = tmp_path_factory.mktemp("site") / "data"   # build.py copies web/ into out.parent
     with redirect_stdout(io.StringIO()):
         main(str(HRES[-1]), str(ENS[-1]), out)
     import json
@@ -138,6 +138,16 @@ def test_map_drops_small_clusters_but_point_panel_keeps_them(built):
         idx = round((g["lat_north"] - 15.0) / g["dlat"]) * g["nlon"] + round((86.5 - g["lon_west"]) / g["dlon"])
         f = next(f for f in d["frames_by_threshold"]["100"] if f["start_h"] == 108)
         assert _hatch_pixels_in_cell(out, f, g, idx) > 0      # Bay point, 26-cell cluster: drawn
+
+
+def test_site_files_and_basemap_colours(built):
+    """The built site is complete, and the page's basemap colours are the ones the palette test checks."""
+    from palette import LAND, OCEAN
+    out, m = built
+    for f in ("index.html", "app.js", "style.css", "geo/land.geojson", "geo/india-boundary.geojson"):
+        assert (out.parent / f).exists(), f
+    assert m["basemap"]["land"] == LAND and m["basemap"]["sea"] == OCEAN
+    assert m["region"] == {"lat_min": 5.0, "lat_max": 38.0, "lon_min": 65.0, "lon_max": 100.0}
 
 
 def _first_bin(m, f):

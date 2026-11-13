@@ -1,11 +1,13 @@
 # Sources of the basemap layers in `web/geo/`
 
-Both files are built by `pipeline/make_geo.py`: clipped to 4–39°N, 64–101°E, simplified with a 0.01° (~1 km)
+All three files are built by `pipeline/make_geo.py`: clipped to the region + 6° (−1–44°N, 59–106°E), simplified with a 0.01° (~1 km)
 tolerance, coordinates rounded to 0.001°. The rain data cells are 0.25° (~28 km), so this simplification is far
 below what the map can resolve.
 
-## `land.geojson` — land fill and coastline
-- Source: **Natural Earth**, 10 m physical vectors, `ne_10m_land` (via cartopy's Natural Earth downloader).
+## `land.geojson` (land fill) and `coastline.geojson` (coast line)
+- Source: **Natural Earth**, 10 m physical vectors, `ne_10m_land` and `ne_10m_coastline` (via cartopy's
+  Natural Earth downloader). The coast is drawn from the coastline lines, not the land outline, so the clip
+  edges never appear as lines.
 - Licence: Natural Earth data is in the **public domain** ("All versions of Natural Earth raster + vector map
   data found on this website are in the public domain", naturalearthdata.com/about/terms-of-use).
 - Contains no political boundaries.
