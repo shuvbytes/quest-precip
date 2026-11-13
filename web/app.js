@@ -435,15 +435,159 @@ function renderPoint(app) {
   });
 }
 
-/* Filled in step 3/4: window summary, nearby range, disagreement sentence, 24 h table, 3 h chart. */
+/* ---------- formatting: same floor rule as the map legend (user, 13 Nov) ---------- */
+function fmtMm(v, floor) { return v < floor ? `< ${fmt(floor)} mm` : `${v.toFixed(1)} mm`; }
+function fmtPct(v, floor) { return v < floor ? `< ${fmt(floor)} %` : `${Math.round(v)} %`; }
+function istShort(iso) {                     // "Thu 17:30" for table headers
+  const d = new Date(parseUTC(iso) + 330 * 60 * 1000);
+  return `${DAYS[d.getUTCDay()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+function thrKey(t) { return `${Number(t)}`; }
+
+/* min and max of a 2-D field (given as fn(row, col)) over the 3x3 neighbourhood that exists */
+function nearby(fn, row, col, nlat, nlon) {
+  let lo = Infinity, hi = -Infinity;
+  for (let r = Math.max(0, row - 1); r <= Math.min(nlat - 1, row + 1); r++)
+    for (let c = Math.max(0, col - 1); c <= Math.min(nlon - 1, col + 1); c++) {
+      const v = fn(r, c); lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+  return [lo, hi];
+}
+
+/* Size of the 8-connected group of flagged cells that contains idx (to tell "isolated, not on the map"). */
+function clusterSize(cells, idx, nlon) {
+  const set = new Set(cells);
+  if (!set.has(idx)) return 0;
+  const seen = new Set([idx]), queue = [idx];
+  while (queue.length) {
+    const i = queue.pop(), r = Math.floor(i / nlon), c = i % nlon;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const cc = c + dc, j = (r + dr) * nlon + cc;
+      if (cc < 0 || cc >= nlon || seen.has(j) || !set.has(j)) continue;
+      seen.add(j); queue.push(j);
+    }
+  }
+  return seen.size;
+}
+
+/* Flag of this cell for threshold key x and window index k: {kind, onMap} or null. */
+function cellFlag(m, x, k, idx) {
+  const D = m.products.disagreement, f = D.frames_by_threshold[x][k];
+  for (const kind of ["wetter", "drier"]) {
+    const cells = f["cells_" + kind];
+    if (cells.includes(idx)) return { kind, onMap: clusterSize(cells, idx, m.grid.nlon) >= D.map_min_cluster };
+  }
+  return null;
+}
+
+function textOn(bg) {                          // dark or white text on a palette colour
+  const n = parseInt(bg.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 150 ? "#1d1f23" : "#ffffff";
+}
+function binColour(prod, v) {
+  const b = prod.bins;
+  if (v < b[0]) return null;
+  let i = 0;
+  while (i < b.length - 1 && v >= b[i + 1]) i++;
+  return prod.colours[Math.min(i, prod.colours.length - 1)];
+}
+
+/* Window summary, nearby range, disagreement sentence, 24 h table (and, step 4, the 3 h chart). */
 function renderPointContent(app) {
   const { m, P, point } = app;
   const content = $("point-body").querySelector(".point-content");
   if (!content || !P || !point) return;
   content.innerHTML = "";
-  const k = frameIndex(m.products.hres_3h.frames);
-  const v = pointValue(P, "hres_3h", [k], point.row, point.col);
-  content.appendChild(el("p", "sub", `Loaded. 3 h value now: ${v.toFixed(1)} mm`));
+  const Pr = m.products, g = m.grid, { row, col } = point, idx = row * g.nlon + col;
+  const val = (name, lead) => pointValue(P, name, lead, row, col);
+  const near = (name, lead) => nearby((r, c) => pointValue(P, name, lead, r, c), row, col, g.nlat, g.nlon);
+
+  // 1. selected window summary (follows mode + slider)
+  const sum = el("div", "summary");
+  if (state.mode === "3h") {
+    const k = frameIndex(Pr.hres_3h.frames), f = Pr.hres_3h.frames[k], fl = f.lowest_drawn;
+    const [lo, hi] = near("hres_3h", [k]);
+    sum.append(el("p", "when", f.label_ist),
+      el("p", "big", `Rain in 3 hours: ${fmtMm(val("hres_3h", [k]), fl)}`),
+      el("p", "near", `nearby: ${fmtMm(lo, fl).replace(" mm", "")}–${fmtMm(hi, fl)}`));
+    sum.querySelector(".big").dataset.field = "sum-3h";
+    sum.querySelector(".near").dataset.field = "near-3h";
+  } else {
+    const k = frameIndex(Pr.hres_24h.frames), f = Pr.hres_24h.frames[k], fl = f.lowest_drawn;
+    const x = state.x, kx = Pr.ens_prob.thresholds_mm.map(thrKey).indexOf(x);
+    const ef = Pr.ens_prob.frames_by_threshold[x][k];
+    const [lo, hi] = near("hres_24h", [k]);
+    const pct = val("ens_prob", [kx, k]);
+    const big = el("p", "big", `Rain in 24 hours (HRES): ${fmtMm(val("hres_24h", [k]), fl)}`);
+    const nr = el("p", "near", `nearby: ${fmtMm(lo, fl).replace(" mm", "")}–${fmtMm(hi, fl)}`);
+    const ch = el("p", "big", `Chance of ≥ ${fmt(x)} mm (ENS): ${fmtPct(pct, ef.lowest_drawn)}`);
+    big.dataset.field = "sum-24h"; nr.dataset.field = "near-24h"; ch.dataset.field = "sum-ens";
+    sum.append(el("p", "when", f.label_ist), big, nr, ch);
+
+    // 2. disagreement sentence for this cell, threshold and window (also isolated cells not hatched on the map)
+    const flag = cellFlag(m, x, k, idx);
+    if (flag) {
+      const txt = Pr.disagreement.point_text[flag.kind]
+        .replaceAll("{hres}", val("hres_24h", [k]).toFixed(1))
+        .replaceAll("{pct}", `${Math.round(pct)}`)
+        .replaceAll("{x}", fmt(x));
+      const d = el("p", "disagree " + flag.kind, txt);
+      d.dataset.field = "disagree";
+      sum.appendChild(d);
+      if (!flag.onMap) sum.appendChild(el("p", "sub",
+        `This point is not marked on the map: the map only marks groups of ${Pr.disagreement.map_min_cluster} or more touching grid points.`));
+    }
+  }
+  content.appendChild(sum);
+
+  // 3. 24 h windows table: HRES total + ENS chance for every threshold, flags marked
+  const wrap = el("div", "table-wrap");
+  const tbl = el("table", "ptable");
+  const cap = el("caption", null, "24-hour windows (start time, IST). ▨ HRES much wetter than the ensemble, • much drier.");
+  tbl.appendChild(cap);
+  const frames24 = Pr.hres_24h.frames, kNow = frameIndex(frames24);
+  const head = el("tr");
+  head.appendChild(el("th", null, ""));
+  frames24.forEach((f, k) => {
+    const th = el("th", k === kNow ? "now" : "", istShort(f.start_utc));
+    th.title = f.label_ist; th.scope = "col";
+    head.appendChild(th);
+  });
+  tbl.appendChild(head);
+  const rowH = el("tr");
+  const thH = el("th", "rowh", "HRES total (mm)"); thH.scope = "row";
+  rowH.appendChild(thH);
+  frames24.forEach((f, k) => {
+    const v = val("hres_24h", [k]);
+    const td = el("td", k === kNow ? "now" : "", v < f.lowest_drawn ? `< ${fmt(f.lowest_drawn)}` : v.toFixed(1));
+    td.dataset.field = `h24-${k}`;
+    rowH.appendChild(td);
+  });
+  tbl.appendChild(rowH);
+  Pr.ens_prob.thresholds_mm.forEach((t, kx) => {
+    const x = thrKey(t), tr = el("tr");
+    const th = el("th", "rowh", `Chance ≥ ${fmt(t)} mm`); th.scope = "row";
+    tr.appendChild(th);
+    Pr.ens_prob.frames_by_threshold[x].forEach((f, k) => {
+      const v = val("ens_prob", [kx, k]);
+      const td = el("td", k === kNow ? "now" : "", v < f.lowest_drawn ? `< ${fmt(f.lowest_drawn)}` : `${Math.round(v)}`);
+      const bg = v < f.lowest_drawn ? null : binColour(Pr.ens_prob, v);
+      if (bg) { td.style.background = bg; td.style.color = textOn(bg); }
+      const flag = cellFlag(m, x, k, idx);
+      if (flag) { td.append(flag.kind === "wetter" ? " ▨" : " •"); td.title = Pr.disagreement.legend[flag.kind]; }
+      td.dataset.field = `ens-${x}-${k}`;
+      tr.appendChild(td);
+    });
+    tbl.appendChild(tr);
+  });
+  wrap.appendChild(tbl);
+  content.appendChild(el("p", "eyebrow", "Every 24-hour window"));
+  content.appendChild(wrap);
+  // bring the current window's column into view (the table scrolls sideways inside its box on narrow panels)
+  const nowTh = head.children[kNow + 1];
+  wrap.scrollLeft = Math.max(0, nowTh.offsetLeft - thH.offsetWidth - 8);
+  content.appendChild(el("p", "sub", "Chances in %. Values below the map's lowest step are shown as “< …”."));
+
   document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
 }
 

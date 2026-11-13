@@ -142,3 +142,16 @@ body {
 .point .err { margin: 10px 0 0; color: #7a1414; font-size: 0.85rem; }
 .point .err button { margin-left: 6px; }
 .point .outside { margin: 8px 0 0; font-size: 0.88rem; }
+.point .summary { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.point .when { margin: 0 0 4px; font-size: 0.8rem; color: var(--ink-3); }
+.point .big { margin: 2px 0; font-size: 0.92rem; font-weight: 600; }
+.point .near { margin: 0 0 4px; font-size: 0.8rem; color: var(--ink-2); }
+.point .disagree { margin: 8px 0 0; padding: 7px 9px; border-radius: 6px; font-size: 0.82rem; line-height: 1.35;
+  background: var(--amber-bg); color: var(--amber-ink); border: 1px solid #e8cf86; }
+.table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+.ptable { border-collapse: collapse; font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ptable caption { caption-side: bottom; text-align: left; padding: 5px 6px; color: var(--ink-3); font-size: 0.7rem; white-space: normal; }
+.ptable th, .ptable td { padding: 3px 5px; text-align: right; border-bottom: 1px solid #eef0f2; }
+.ptable th { font-weight: 600; color: var(--ink-2); background: #fafbfc; }
+.ptable th.rowh { text-align: left; position: sticky; left: 0; z-index: 1; }
+.ptable .now { outline: 2px solid var(--accent); outline-offset: -2px; }
