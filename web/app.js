@@ -14,7 +14,12 @@ function showError(msg) {
   div.textContent = "Could not load the forecast: " + msg;
   document.querySelector(".map-wrap").appendChild(div);
 }
-window.addEventListener("error", (e) => showError(e.message));
+// Before the page is ready, any error means the forecast did not load: show the banner.
+// After that, an error in one interaction must not replace a working map with "could not load".
+window.addEventListener("error", (e) => {
+  if (document.body.dataset.status === "ready") { console.error(e.error || e.message); document.body.dataset.lasterror = e.message; }
+  else showError(e.message);
+});
 
 async function getJSON(url) {
   const r = await fetch(url, { cache: "no-cache" });
@@ -71,10 +76,19 @@ function readHash(m) {
   return z && c ? { zoom: +z, center: c.split(",").map(Number) } : null;
 }
 
+/* Browsers limit history.replaceState (Safari: 100 calls per 10 s, then a "SecurityError"). Dragging the slider
+   renders many times per second, so the URL is written only once things are still for 400 ms, only if it changed,
+   and never in a way that can break the map. */
+let hashTimer = null;
 function writeHash() {
-  const h = new URLSearchParams({ mode: state.mode, t: state.t });
-  if (state.mode === "24h") { h.set("fill", state.fill); h.set("x", state.x); h.set("hatch", state.hatch ? 1 : 0); }
-  history.replaceState(null, "", "#" + h.toString());
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const h = new URLSearchParams({ mode: state.mode, t: state.t });
+    if (state.mode === "24h") { h.set("fill", state.fill); h.set("x", state.x); h.set("hatch", state.hatch ? 1 : 0); }
+    const next = "#" + h.toString();
+    if (next === location.hash) return;
+    try { history.replaceState(null, "", next); } catch (e) { console.warn("URL not updated:", e.message); }
+  }, 400);
 }
 
 /* ---------------- frames ---------------- */

@@ -44,17 +44,48 @@ f.addEventListener("load", copy);
 </script></body></html>"""
 
 
+# Slider stress test: 300 'input' events in one burst, counting history.replaceState calls (Safari throws after
+# 100 per 10 s). Reports the count, the page status, any post-load error and the final URL hash.
+STRESS = """<!doctype html><html><body data-status="loading"><iframe id="f" src="index.html#{hash}" style="width:1200px;height:800px;border:0"></iframe>
+<script>
+const f = document.getElementById("f");
+function go() {{
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready") return setTimeout(go, 100);
+  let calls = 0;
+  const orig = w.history.replaceState.bind(w.history);
+  w.history.replaceState = (...a) => {{ calls++; return orig(...a); }};
+  const sl = d.getElementById("t");
+  for (let i = 0; i < 300; i++) {{ sl.value = i % (+sl.max + 1); sl.dispatchEvent(new w.Event("input")); }}
+  setTimeout(() => {{
+    document.body.dataset.calls = calls;
+    document.body.dataset.pagestatus = d.body.dataset.status;
+    document.body.dataset.lasterror = d.body.dataset.lasterror || "none";
+    document.body.dataset.hash = w.location.hash;
+    document.body.dataset.label = d.getElementById("t-label").textContent;
+    document.body.dataset.status = "done";
+  }}, 1200);
+}}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
+        q = urllib.parse.parse_qs(u.query)
+        if u.path == "/__stress.html":
+            return self._send(STRESS.format(hash=q.get("hash", ["mode=3h&t=0"])[0]).encode())
         if u.path != "/__viewport.html":
             return super().do_GET()
-        q = urllib.parse.parse_qs(u.query)
         body = WRAPPER.format(w=int(q["w"][0]), h=int(q["h"][0]), scroll=int(q.get("scroll", ["0"])[0]),
                               src="index.html" + (("#" + q["hash"][0]) if q.get("hash") else "")).encode()
+        self._send(body)
+
+    def _send(self, body):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -92,6 +123,18 @@ def shot(name, w, h, hsh="", scroll=0, port=None):
     return attrs
 
 
+def stress(hsh="mode=3h&t=0"):
+    httpd, port = serve()
+    try:
+        url = f"http://127.0.0.1:{port}/__stress.html?" + urllib.parse.urlencode({"hash": hsh})
+        dom = chrome(["--window-size=1300,900", "--dump-dom"], url).stdout
+    finally:
+        httpd.shutdown()
+    get = lambda k: (re.search(rf'data-{k}="([^"]*)"', dom) or [None, "?"])[1]
+    print(f"stress: 300 slider inputs -> history.replaceState calls={get('calls')}, page status={get('pagestatus')}, "
+          f"post-load error={get('lasterror')}\n        final hash={get('hash')}\n        label={get('label')}")
+
+
 def main(specs):
     httpd, port = serve()
     try:
@@ -106,4 +149,7 @@ def main(specs):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["desktop=1440x900"])
+    if sys.argv[1:2] == ["stress"]:
+        stress(*sys.argv[2:3])
+    else:
+        main(sys.argv[1:] or ["desktop=1440x900"])
