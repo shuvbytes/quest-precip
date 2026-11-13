@@ -161,8 +161,9 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (13 Nov, afternoon IST): M0–M5 done; M6 next
-**M0–M5 done; 41 tests passing.** The map page runs locally and was checked by the user in Safari (all five check
+## Status (13 Nov, evening IST): M0–M6 done; M7 next
+**M0–M6 done; 41 tests passing; pushed to GitHub (13 Nov evening).** M6 closed by the user after confirming
+both keyboard fixes in Safari (the ring lands on the crosshair). Earlier (afternoon): M0–M5 done. The map page runs locally and was checked by the user in Safari (all five check
 views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
 **https://github.com/shuvbytes/quest-precip** (private, branch `main`). Pages not enabled yet (M7).
 Before making the repo public, re-check tracked files (now also `web/`, incl. vendored Leaflet + source map).
@@ -207,6 +208,9 @@ Commits so far:
 | `fff79a2` | Cream land #fdf8ee; "Script error." banner fix; cache-busted asset links |
 | `3482679`, `b9a11e1` | Vendored leaflet.js.map; ignored-error warning shows file/line |
 | `42a3b24` + this commit | M5 closed; status updated and pushed to GitHub (13 Nov) |
+| `4bcbbd9` … `7edceb3` | M6 steps 1–6: exact 24 h array, selection + lazy points.bin, summary/table, SVG chart, keyboard/phone, exact-match check |
+| `911cd0d`, `c202a2e`, `191cbe7` | Crosshair keyboard-only; Enter selects exactly under it; crosshair reaches every grid point |
+| this commit | M6 closed; M8 point-card idea recorded; pushed |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -398,6 +402,12 @@ User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`,
 - **Open wording issue (needs the user's decision):** the approved "wetter" sentence ends "Heavy rain is possible,
   not likely." At low thresholds this misleads (e.g. 1.5 mm at X = 1 mm). Proposal: "Rain of X mm or more is
   possible here, but not likely." (and for drier: unchanged). Not changed without approval.
+
+## M8 idea (user, 13 Nov) — record only, build in M8 after deployment
+Compact **point card** anchored next to the selected point on the map: grid point + window, the main number, a chance
+chip, a disagreement badge, a 6-day sparkline, and a "Full details" button that opens the existing side panel.
+Updates with the slider; Esc/× closes; bottom sheet on phones; keyboard-accessible. **Reuse the panel's data code**
+(selection, points.bin decode, formatting, flag lookup) rather than duplicating it.
 
 ## Next steps
 **M7 — GitHub Actions + Pages deploy** (14 Nov per schedule; 13 Nov evening if time): workflow that fetches the latest
