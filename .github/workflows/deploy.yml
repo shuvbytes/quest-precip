@@ -50,6 +50,7 @@ jobs:
         shell: bash -el {0}    # login shell, so the micromamba environment is active in every step
     outputs:
       skip: ${{ steps.check.outputs.skip }}
+      generated: ${{ steps.site.outputs.generated }}
     steps:
       - uses: actions/checkout@v7
 
@@ -85,10 +86,12 @@ jobs:
         run: python -m pytest -q
 
       - name: Build site_build/
+        id: site
         if: steps.check.outputs.skip != 'true'
         run: |
           python pipeline/build.py data/raw/hres_tp_*.grib2 data/raw/ens_tpg_*.grib2
           python -c "import json; m=json.load(open('site_build/data/manifest.json')); print('built run', m['run']['utc'], '| generated', m['generated_utc'])"
+          echo "generated=$(python -c "import json; print(json.load(open('site_build/data/manifest.json'))['generated_utc'])")" >> "$GITHUB_OUTPUT"
           du -sh site_build site_build/data
 
       - name: Forced failure (test of the failure path)
@@ -116,7 +119,15 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
 
-      # Tell the point API (Render free web service) to load the new run now rather than at its next 5-minute check.
-      # It may be asleep (free services sleep after 15 min idle); waking takes about a minute. Never fails the deploy.
-      - name: Nudge the point API
-        run: curl -sS --max-time 120 https://quest-precip-api.onrender.com/health || true
+      # Make the point API (Render free web service) load the build just deployed: ask it to check now, repeatedly,
+      # until it reports this build (covers CDN delay and a sleeping service, ~1 min to wake). Until then the page
+      # rejects the API's answers as "different build" and uses points.bin. Never fails the deploy.
+      - name: Point API loads the new build
+        run: |
+          want="${{ needs.build.outputs.generated }}"
+          for i in $(seq 1 12); do
+            got=$(curl -sS --max-time 120 "https://quest-precip-api.onrender.com/health?check=1" | python3 -c "import json,sys; print(json.load(sys.stdin).get('generated_utc'))" 2>/dev/null)
+            echo "try $i: API has build $got, site has $want"
+            [ "$got" = "$want" ] && break
+            sleep 20
+          done

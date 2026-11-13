@@ -175,6 +175,18 @@ def test_api_reloads_when_a_new_build_appears(client):
     assert client.get("/health").json()["run_utc"] == "2099-01-01T00:00Z"
 
 
+def test_api_forced_check_loads_a_new_build_at_once(client):
+    """/health?check=1 (called after each site deploy) loads a newer build in the same request."""
+    import json
+    import app as api
+    f = client.data_dir / "manifest.json"
+    m = json.loads(f.read_text())
+    m["generated_utc"] = "2099-02-02T00:00Z"
+    f.write_text(json.dumps(m))
+    api.store.last_check -= 60                         # outside the 15 s gap between forced checks
+    assert client.get("/health", params={"check": 1}).json()["generated_utc"] == "2099-02-02T00:00Z"
+
+
 def test_api_gzips_point_answers(client):
     """Render's free plan includes 5 GB outbound a month: /point answers go out gzipped (~3 kB instead of ~37 kB)."""
     r = client.get("/point", params={"lat": 15, "lon": 86.5}, headers={"Accept-Encoding": "gzip"})

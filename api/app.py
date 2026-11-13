@@ -26,7 +26,9 @@ import pointcore as pc
 
 SITE_URL = os.environ.get("SITE_URL", "https://shuvbytes.github.io/quest-precip").rstrip("/")
 DATA_DIR = os.environ.get("DATA_DIR")              # tests / local runs: a folder with manifest.json + points.bin
-CHECK_EVERY_S = float(os.environ.get("CHECK_EVERY_S", "300"))
+# A check is a conditional GET (ETag), normally "304 Not Modified"; 60 s keeps the API close behind a new deploy.
+CHECK_EVERY_S = float(os.environ.get("CHECK_EVERY_S", "60"))
+FORCED_CHECK_GAP_S = 15         # /health?check=1 at most this often
 ALLOWED_ORIGINS = ["https://shuvbytes.github.io"]  # the site; browsers elsewhere get no CORS header
 
 
@@ -133,8 +135,12 @@ def root():
 
 
 @app.get("/health", summary="Is the forecast loaded, and which run?")
-def health(background: BackgroundTasks):
-    store.maybe_refresh(background)
+def health(background: BackgroundTasks,
+           check: bool = Query(False, description="Look for a newer build now (used after each site deploy)")):
+    if check and time.time() - store.last_check > FORCED_CHECK_GAP_S:
+        store.refresh()                                     # synchronous, so this answer shows the result
+    else:
+        store.maybe_refresh(background)
     base = {"source": DATA_DIR and "local files" or SITE_URL, "last_check_utc": store.last_check_utc,
             "last_error": store.last_error}
     if not store.data:
