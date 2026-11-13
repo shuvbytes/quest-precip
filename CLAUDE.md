@@ -49,7 +49,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - [x] M4 3857 PNGs + manifest + point grid; alignment check (real transfer size: measure in M7 after deploy).
       Disagreement layer: approved and built (min cluster 3 on map).
 - [x] M5 Leaflet front end locally (13 Nov)
-- [ ] M6 client-side point forecast panel (lazy-loaded)
+- [x] M6 client-side point forecast panel (lazy-loaded) — 13 Nov
 - [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
 - [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
 - [ ] M8 honesty/UX polish, "last updated", README
@@ -352,12 +352,35 @@ Checks done: status ready, no console errors, slider labels equal the manifest (
 1440 px, legends from manifest, footer attribution. Known cosmetic item: at zoom 7–8 the fine dots look slightly uneven
 (non-integer scaling of 12 px/cell).
 
+## M6 — point panel (13 Nov) — `web/app.js` (point section), `pipeline/m6_check.py`
+User decisions at plan approval: **exact 24 h array** in points.bin (`hres_24h`, so panel = map = sentence);
+**keyboard = crosshair + Enter** on the focused map; **small values shown as "< 0.5 mm" / "< 1 mm" / "< 2 %", no bar**.
+- points.bin now: hres_3h u16 0.1 mm [48], hres_24h u16 0.1 mm [11], ens_prob u8 % [7×11]; 3,656,835 B raw,
+  600,646 B gzip -9. `read_points` returns a dict by name. Test: hres_24h equals the map's values to 0.1 mm exactly.
+- Click/tap → nearest grid point (ring marker); outside the area → "No forecast here" with the area's limits.
+  points.bin is fetched on the first selection with a progress bar and Retry; DataView little-endian reads.
+- Panel: grid point + clicked location, agreed wording (manifest), selected-window summary + "nearby: X–Y mm" (3×3)
+  + ENS chance; disagreement sentence for the current X/window incl. isolated cells (note "not marked on the map");
+  3-hourly **plain SVG** bar chart (IST midnights, selected window band, y axis ≥ 5 mm so trace rain looks small,
+  hover/tap readout, values table); 24 h table (HRES total + ENS chance per threshold, palette shading, ▨/• flags,
+  current window outlined and scrolled into view as whole columns).
+- URL `p=lat,lon` (shared links reopen the point); Esc / × close. Keyboard: crosshair on map focus, Enter/Space
+  selects, arrows pan (global ←/→ time stepping disabled while the map has focus). Phone: panel directly below the
+  map, scrolled into view after a tap; no horizontal scroll at 390 px.
+- **Correctness (`python pipeline/m6_check.py <hres>`): 697/697 fields match exactly** (Chennai 13.0827N 80.2707E →
+  13.00N 80.25E, Bay 15.00N 86.50E, dry 22.00N 78.00E, a hatched Bay cell 9.50N 85.00E, an isolated flag 38.00N 78.75E):
+  48 three-hourly values, 11 daily totals, 77 ENS cells, summary lines and both disagreement sentences. Raw GRIB vs
+  stored: ≤ 0.05 mm (3 h).
+- Dev tooling: `m5_screens.py` modes `keys` (keyboard path), `stress` (URL writes), env `SLOW_POINTS`/`REAL_TIME`
+  (capture the loading state).
+- **Open wording issue (needs the user's decision):** the approved "wetter" sentence ends "Heavy rain is possible,
+  not likely." At low thresholds this misleads (e.g. 1.5 mm at X = 1 mm). Proposal: "Rain of X mm or more is
+  possible here, but not likely." (and for drier: unchanged). Not changed without approval.
+
 ## Next steps
-**M6 — point panel** (after the user's go-ahead): click → lazy-load `data/points.bin` (layout in manifest `points`);
-show the agreed wording "Model value at the nearest grid point (0.25°, ~25 km spacing). Rain can vary a lot within that
-distance." + "nearby: X–Y mm" (3×3 min–max); 3 h bars + 24 h total for the current window + ENS chances ladder;
-disagreement sentence from `cells_wetter/cells_drier` + `point_text` (every flagged cell, even isolated ones). Check:
-click Chennai / the Bay cell and compare with a Python printout of the same cell and window.
+**M7 — GitHub Actions + Pages deploy** (14 Nov per schedule; 13 Nov evening if time): workflow that fetches the latest
+00z/12z run, builds `site_build/`, runs the tests, and deploys with `actions/upload-pages-artifact` + `deploy-pages`;
+public URL; measure the real transfer size of points.bin (gzip by Pages or not → ship .gz + DecompressionStream).
 
 ## Remaining schedule (agreed 12 Nov)
 | Day (IST) | Work |
