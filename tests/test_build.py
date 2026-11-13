@@ -90,6 +90,8 @@ def test_disagreement_layer(built):
     for f in frames:
         assert (f["file"] is None) == (f["n_wetter_on_map"] + f["n_drier_on_map"] == 0)
         assert f["file"] is None or (out / f["file"]).exists()
+        assert (f["file"] is None) == (f["file_bold"] is None)
+        assert f["file_bold"] is None or (out / f["file_bold"]).exists()
         assert f["n_wetter"] == len(f["cells_wetter"]) >= f["n_wetter_on_map"]
         assert f["n_drier"] == len(f["cells_drier"]) >= f["n_drier_on_map"]
     if m["run"]["utc"] == "2026-11-12T00:00Z":

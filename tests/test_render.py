@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from render import Grid, classify, merc_lat, merc_y
 
@@ -29,12 +30,13 @@ def test_every_pixel_samples_the_cell_it_is_drawn_in():
     assert set(rows) == set(range(g.nlat)) and set(cols) == set(range(g.nlon))
 
 
-def test_hatch_only_inside_flagged_cells():
-    from render import hatch_codes
-    g = Grid.from_coords(LAT, LON)
+@pytest.mark.parametrize("style", ["fine", "bold"])
+def test_hatch_only_inside_flagged_cells(style):
+    from render import hatch_codes, hatch_grid
+    g = hatch_grid(Grid.from_coords(LAT, LON), style)
     wet = np.zeros((g.nlat, g.nlon), bool); dry = np.zeros_like(wet)
     wet[40, 50] = True; dry[100, 20] = True
-    codes = hatch_codes(wet, dry, g)
+    codes = hatch_codes(wet, dry, g, style)
     rows, cols = g.resample_index()
     in_wet = (rows[:, None] == 40) & (cols[None, :] == 50)
     in_dry = (rows[:, None] == 100) & (cols[None, :] == 20)
@@ -42,12 +44,13 @@ def test_hatch_only_inside_flagged_cells():
     assert (codes[in_wet] == 1).any() and (codes[in_dry] == 1).any()
 
 
-def test_drier_dot_is_whole_and_centred_in_its_cell():
+@pytest.mark.parametrize("style", ["fine", "bold"])
+def test_drier_dot_is_whole_and_centred_in_its_cell(style):
     from render import hatch_codes, hatch_grid
-    g = hatch_grid(Grid.from_coords(LAT, LON))
+    g = hatch_grid(Grid.from_coords(LAT, LON), style)
     dry = np.zeros((g.nlat, g.nlon), bool)
     dry[100, 20] = True                                  # one isolated cell
-    codes = hatch_codes(np.zeros_like(dry), dry, g)
+    codes = hatch_codes(np.zeros_like(dry), dry, g, style)
     rr, cc = np.nonzero(codes == 1)
     # ink forms one compact blob in the middle of the cell, surrounded by white
     assert rr.max() - rr.min() <= 6 and cc.max() - cc.min() <= 6

@@ -20,8 +20,45 @@
   <main class="layout">
     <section class="map-wrap" aria-label="Map">
       <div id="map"></div>
+      <div class="showing" id="showing" aria-live="polite"></div>
+      <div class="zoom-note" id="zoom-note" hidden></div>
     </section>
-    <aside class="panel" id="panel" aria-label="Map controls and legend"></aside>
+
+    <aside class="panel" id="panel" aria-label="Map controls and legend">
+      <div class="seg" role="group" aria-label="What to show">
+        <button type="button" data-mode="3h">3-hour rain</button>
+        <button type="button" data-mode="24h">24-hour rain &amp; chance</button>
+      </div>
+
+      <div id="box24" class="box24" hidden>
+        <p class="eyebrow">Map colour shows</p>
+        <div class="seg seg-big" role="group" aria-label="Map colour shows">
+          <button type="button" data-fill="rain">Rain total<span>one detailed run (HRES)</span></button>
+          <button type="button" data-fill="chance"><span id="chance-btn-title">Chance of rain</span><span>ensemble (ENS)</span></button>
+        </div>
+        <label class="row">Threshold
+          <select id="x" aria-label="Rain threshold for the chance and disagreement layers"></select>
+          <span>mm in 24 h</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="hatch" checked>
+          <span>Mark where the single detailed run and the ensemble disagree</span>
+        </label>
+      </div>
+
+      <div class="time">
+        <label for="t" class="eyebrow">Time window</label>
+        <div class="time-row">
+          <button type="button" id="prev" aria-label="Previous time window">‹</button>
+          <input type="range" id="t" min="0" max="0" step="1" value="0">
+          <button type="button" id="next" aria-label="Next time window">›</button>
+        </div>
+        <p class="t-label" id="t-label"></p>
+        <p class="t-lead" id="t-lead"></p>
+      </div>
+
+      <div id="legend" class="legend"></div>
+    </aside>
   </main>
 
   <footer class="foot" id="foot"></footer>

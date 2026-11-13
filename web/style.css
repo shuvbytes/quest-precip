@@ -49,3 +49,35 @@ body {
 /* Error banner shown if anything fails to load */
 .error { position: absolute; z-index: 1000; left: 12px; right: 12px; top: 12px;
   background: #fde8e8; color: #7a1414; padding: 10px 12px; border-radius: var(--radius); font-size: 0.9rem; }
+
+/* ---------- Controls panel ---------- */
+.eyebrow { margin: 14px 0 6px; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-3); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 9px 8px; font: inherit; font-size: 0.86rem;
+  color: var(--ink-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+.seg-big button { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; font-weight: 600; font-size: 0.92rem; }
+.seg-big button span { font-weight: 400; font-size: 0.74rem; opacity: 0.85; }
+.box24 { margin-top: 4px; }
+.row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.86rem; color: var(--ink-2); }
+.row select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 0.86rem; color: var(--ink-2); }
+.check input { margin-top: 2px; width: 16px; height: 16px; }
+
+.time-row { display: flex; align-items: center; gap: 6px; }
+.time-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.time-row button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  font-size: 1.2rem; line-height: 1; cursor: pointer; color: var(--ink); }
+.t-label { margin: 8px 0 2px; font-size: 0.95rem; font-weight: 600; }
+.t-lead { margin: 0; font-size: 0.78rem; color: var(--ink-3); }
+
+/* ---------- On-map labels ---------- */
+.showing { position: absolute; z-index: 800; top: 10px; left: 56px; right: 10px; pointer-events: none; }
+.showing span { display: inline-block; background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px; font-size: 0.85rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.zoom-note { position: absolute; z-index: 800; top: 48px; left: 56px; background: var(--amber-bg); color: var(--amber-ink);
+  border: 1px solid #e8cf86; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.zoom-note[hidden] { display: none; }

@@ -84,10 +84,13 @@ def render_frames(tp, p, packs, out: Path):
             wet_map, dry_map = keep_min_cluster(wet), keep_min_cluster(dry)
             name = f"disagree_p{t:g}_{s:03d}-{e:03d}.png"
             drawn = bool(wet_map.any() or dry_map.any())
+            name_bold = name.replace("disagree_", "disagree-bold_")
             if drawn:
-                render_hatch(wet_map, dry_map, grid, out / "frames" / name)
+                render_hatch(wet_map, dry_map, grid, out / "frames" / name, style="fine")
+                render_hatch(wet_map, dry_map, grid, out / "frames" / name_bold, style="bold")
             frames["disagree"].append({
-                "file": f"frames/{name}" if drawn else None,
+                "file": f"frames/{name}" if drawn else None,             # zoom >= min_zoom_for_marks
+                "file_bold": f"frames/{name_bold}" if drawn else None,   # zoom <  min_zoom_for_marks
                 "threshold_mm": float(t), "start_h": s, "end_h": e,
                 "n_wetter": int(wet.sum()), "n_drier": int(dry.sum()),
                 "n_wetter_on_map": int(wet_map.sum()), "n_drier_on_map": int(dry_map.sum()),

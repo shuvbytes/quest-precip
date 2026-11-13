@@ -113,43 +113,52 @@ HATCH_INK = "#111111"
 HATCH_EDGE = "#ffffff"
 
 
-HATCH_PX_PER_CELL = 12   # finer than the data frames (4) so each cell holds a whole symbol
+HATCH_PX_PER_CELL = {"fine": 12,   # zoom >= 6: whole symbol per cell, thin strokes
+                     "bold": 4}    # zoom < 6 (user, 13 Nov): fewer, thicker marks that survive downscaling
 
 
-def hatch_grid(grid: Grid) -> Grid:
+def hatch_grid(grid: Grid, style: str = "fine") -> Grid:
     """Same grid and bounds, more pixels per cell (the overlay is placed by bounds, so it aligns)."""
-    return Grid(grid.lat_n, grid.lon_w, grid.dlat, grid.dlon, grid.nlat, grid.nlon, HATCH_PX_PER_CELL)
+    return Grid(grid.lat_n, grid.lon_w, grid.dlat, grid.dlon, grid.nlat, grid.nlon, HATCH_PX_PER_CELL[style])
 
 
-def hatch_codes(wetter, drier, grid: Grid):
+def hatch_codes(wetter, drier, grid: Grid, style: str = "fine"):
     """Pattern codes per output pixel: 0 transparent, 1 ink, 2 white edge.
 
-    wetter -> diagonal lines (2 per cell); drier -> ONE round dot centred in each cell, so a
-    single flagged cell always shows a complete symbol. Ink with a white edge stays visible on
-    both the palest and darkest probability colours; the shape (not colour) carries the meaning.
+    wetter -> diagonal lines; drier -> ONE round dot centred in each cell, so a single flagged cell
+    always shows a complete symbol. Ink with a white edge stays visible on both the palest and darkest
+    probability colours; the shape (not colour) carries the meaning.
+    fine: 1-px lines every 6 px, small dot.  bold: 2-px lines every 4 px, dot filling most of the cell.
     """
     rows, cols = grid.resample_index()
     wet = np.asarray(wetter, bool)[np.ix_(rows, cols)]
     dry = np.asarray(drier, bool)[np.ix_(rows, cols)]
     r, c = np.meshgrid(np.arange(grid.height), np.arange(grid.width), indexing="ij")
     out = np.zeros((grid.height, grid.width), np.uint8)
-    d = (r + c) % 6
-    out[wet & (d == 0)] = 1
-    out[wet & (d == 1)] = 2
+    if style == "fine":
+        d = (r + c) % 6
+        ink, edge = d == 0, d == 1
+        r_ink, r_edge = 0.24, 0.36
+    else:
+        d = (r + c) % 4
+        ink, edge = d <= 1, d == 2
+        r_ink, r_edge = 0.30, 0.50
+    out[wet & ink] = 1
+    out[wet & edge] = 2
     # position of each pixel inside its source cell, in cell units (-0.5..0.5)
     plat, _ = grid.pixel_to_latlon(np.arange(grid.height), 0)
     _, plon = grid.pixel_to_latlon(0, np.arange(grid.width))
     fy = (plat - (grid.lat_n - rows * grid.dlat)) / grid.dlat
     fx = (plon - (grid.lon_w + cols * grid.dlon)) / grid.dlon
     rad = np.hypot(fy[:, None], fx[None, :])
-    out[dry & (rad <= 0.36)] = 2
-    out[dry & (rad <= 0.24)] = 1
+    out[dry & (rad <= r_edge)] = 2
+    out[dry & (rad <= r_ink)] = 1
     return out
 
 
-def render_hatch(wetter, drier, grid: Grid, path: Path):
-    grid = hatch_grid(grid)
-    codes = hatch_codes(wetter, drier, grid)
+def render_hatch(wetter, drier, grid: Grid, path: Path, style: str = "fine"):
+    grid = hatch_grid(grid, style)
+    codes = hatch_codes(wetter, drier, grid, style)
     img = Image.fromarray(codes, mode="P")
     pal = [0, 0, 0] + [int(h[i:i + 2], 16) for h in (HATCH_INK, HATCH_EDGE) for i in (1, 3, 5)]
     img.putpalette(pal + [0, 0, 0] * (256 - len(pal) // 3))
