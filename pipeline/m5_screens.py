@@ -72,6 +72,40 @@ f.addEventListener("load", go);
 </script></body></html>"""
 
 
+# Keyboard test: focus the map, press ArrowRight x3 (must pan, not change the time window), Enter (select the point under
+# the centre crosshair), wait for the panel, then Escape (close). Reports what happened at each stage.
+KEYS = """<!doctype html><html><body data-status="loading"><iframe id="f" src="index.html#{hash}" style="width:1200px;height:800px;border:0"></iframe>
+<script>
+const f = document.getElementById("f");
+const out = (k, v) => {{ document.body.dataset[k] = v; }};
+function go() {{
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready") return setTimeout(go, 100);
+  const mc = d.getElementById("map"), label0 = d.getElementById("t-label").textContent;
+  const key = (k) => mc.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: k, keyCode: {{ArrowRight: 39, Enter: 13, Escape: 27}}[k], bubbles: true }}));
+  mc.focus();
+  out("crosshair", d.getElementById("crosshair").hidden ? "hidden" : "visible");
+  const c0 = w.__map ? "" : "";
+  for (let i = 0; i < 3; i++) key("ArrowRight");
+  setTimeout(() => {{
+    out("timeunchanged", String(d.getElementById("t-label").textContent === label0));
+    key("Enter");
+    const wait = (n) => {{
+      const p = d.body.dataset.point || "";
+      if ((p === "" || p === "loading") && n < 60) return setTimeout(() => wait(n + 1), 100);
+      out("selected", p);
+      out("panel", d.getElementById("point").hidden ? "hidden" : "visible");
+      out("hash", w.location.hash);
+      key("Escape");
+      setTimeout(() => {{ out("afteresc", d.getElementById("point").hidden ? "hidden" : "visible"); out("status", "done"); }}, 600);
+    }};
+    wait(0);
+  }}, 800);
+}}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -79,6 +113,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        if u.path == "/__keys.html":
+            return self._send(KEYS.format(hash=q.get("hash", ["mode=3h&t=33"])[0]).encode())
         if u.path == "/__stress.html":
             return self._send(STRESS.format(hash=q.get("hash", ["mode=3h&t=0"])[0]).encode())
         if u.path.endswith("points.bin") and os.environ.get("SLOW_POINTS"):
@@ -145,6 +181,19 @@ def stress(hsh="mode=3h&t=0"):
           f"post-load error={get('lasterror')}\n        final hash={get('hash')}\n        label={get('label')}")
 
 
+def keys(hsh="mode=3h&t=33"):
+    httpd, port = serve()
+    try:
+        url = f"http://127.0.0.1:{port}/__keys.html?" + urllib.parse.urlencode({"hash": hsh})
+        dom = chrome(["--window-size=1300,900", "--dump-dom"], url).stdout
+    finally:
+        httpd.shutdown()
+    get = lambda k: (re.search(rf'data-{k}="([^"]*)"', dom) or [None, "?"])[1]
+    print(f"keys: crosshair on focus={get('crosshair')}, time window unchanged after 3x ArrowRight={get('timeunchanged')}, "
+          f"Enter selected point={get('selected')}, panel={get('panel')}, after Esc panel={get('afteresc')}\n"
+          f"      URL hash after selection={get('hash')}")
+
+
 def main(specs):
     httpd, port = serve()
     try:
@@ -161,5 +210,7 @@ def main(specs):
 if __name__ == "__main__":
     if sys.argv[1:2] == ["stress"]:
         stress(*sys.argv[2:3])
+    elif sys.argv[1:2] == ["keys"]:
+        keys(*sys.argv[2:3])
     else:
         main(sys.argv[1:] or ["desktop=1440x900"])

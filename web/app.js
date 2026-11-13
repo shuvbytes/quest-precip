@@ -387,6 +387,7 @@ function selectPoint(app, lat, lon, clicked) {
     fillColor: "#fff", fillOpacity: 0.9, interactive: false }).addTo(map);
   writeHash();
   renderPoint(app);
+  if (clicked && window.matchMedia("(max-width: 700px)").matches) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function closePoint(app) {
@@ -809,11 +810,26 @@ function wire(app) {
   $("next").addEventListener("click", () => step(1));
   document.addEventListener("keydown", (e) => {
     if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+    if (document.activeElement === map.getContainer()) return;   // on the focused map, arrows pan (Leaflet)
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "ArrowRight") step(1);
   });
   map.on("zoomend", rerender);
   map.on("click", (e) => selectPoint(app, e.latlng.lat, e.latlng.lng, true));
+  // Keyboard (user decision, 13 Nov): Tab to the map -> a centre crosshair shows; arrows pan and +/- zoom (Leaflet);
+  // Enter or Space selects the grid point under the crosshair; Esc closes the panel.
+  const mc = map.getContainer();
+  mc.setAttribute("aria-label",
+    "Forecast map. Arrow keys move the map, plus and minus zoom, Enter shows the forecast at the centre cross, Escape closes it.");
+  mc.addEventListener("focus", () => { $("crosshair").hidden = false; });
+  mc.addEventListener("blur", () => { $("crosshair").hidden = true; });
+  mc.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const c = map.getCenter();
+      selectPoint(app, c.lat, c.lng, true);
+    }
+  });
   $("point-close").addEventListener("click", () => closePoint(app));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("point").hidden) closePoint(app); });
 }

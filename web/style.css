@@ -164,3 +164,11 @@ body {
 .point details.vals { margin-top: 4px; font-size: 0.78rem; }
 .point details.vals summary { cursor: pointer; color: var(--accent); }
 .point details.vals .ptable { margin-top: 4px; }
+/* keyboard crosshair: shown while the map has focus; Enter selects the grid point under it */
+.crosshair { position: absolute; z-index: 790; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+  pointer-events: none; }
+.crosshair::before, .crosshair::after { content: ""; position: absolute; background: #111; box-shadow: 0 0 0 1px #fff; }
+.crosshair::before { left: 12px; top: 0; width: 2px; height: 26px; }
+.crosshair::after { top: 12px; left: 0; height: 2px; width: 26px; }
+.crosshair[hidden] { display: none; }
+#map:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
