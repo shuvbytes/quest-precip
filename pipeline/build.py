@@ -236,10 +236,28 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
     return path, m
 
 
+VERSIONED = ("style.css", "app.js", "vendor/leaflet-1.9.4/leaflet.css", "vendor/leaflet-1.9.4/leaflet.js")
+
+
 def copy_web(site_root: Path):
-    """The page (web/) goes next to data/, so site_root is the complete static site."""
+    """The page (web/) goes next to data/, so site_root is the complete static site.
+
+    Cache busting: each script/stylesheet link in index.html gets ?v=<first 10 hex of its SHA-256>, so a changed
+    file always has a new URL and a browser cannot keep using a stale cached copy (Safari, 13 Nov). Integrity
+    hashes still apply to the file content, so they are unaffected.
+    """
+    import hashlib
+    import re
     import shutil
     shutil.copytree(WEB, site_root, dirs_exist_ok=True)
+    index = site_root / "index.html"
+    html = index.read_text()
+    for rel in VERSIONED:
+        v = hashlib.sha256((site_root / rel).read_bytes()).hexdigest()[:10]
+        html, n = re.subn(rf'(["\']){re.escape(rel)}(\?v=[0-9a-f]+)?(["\'])', rf"\g<1>{rel}?v={v}\g<3>", html)
+        if n != 1:
+            raise ValueError(f"expected exactly one reference to {rel} in index.html, found {n}")
+    index.write_text(html)
     return site_root
 
 

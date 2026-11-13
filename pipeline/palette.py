@@ -85,7 +85,10 @@ RAIN_L = [0.91, 0.86, 0.80, 0.72, 0.63, 0.53, 0.42, 0.30]
 RAIN_C = [0.06, 0.085, 0.11, 0.135, 0.15, 0.15, 0.13, 0.10]
 RAIN = [oklch_to_hex(L, C, 250) for L, C in zip(RAIN_L, RAIN_C)]   # blue
 PROB = ramp(6, hue=345, C_max=0.20)  # magenta, even steps, 6 bins: 2-10-25-50-75-90-100
-LAND = "#fafafa"                 # map background, land (neutral; #f4f4f4 failed: palest dE 6.8-7.3)
+# Land: light cream (user, 13 Nov) so land reads against the white sea without the coastline. Chosen as the darkest
+# tint that still keeps the palest rain and chance colours >= dE 8 on it (8.1 worst); a blue-grey sea was rejected
+# because the palest rain is itself pale blue (5.0 on #e8eef3). Earlier: #fafafa (land-sea dE 1.5, now 2.4).
+LAND = "#fdf8ee"
 OCEAN = "#ffffff"                # map background, sea
 # Veil over everything OUTSIDE the forecast area (no data there). Never overlaps data, so it does not
 # affect the rain/chance contrast; it only has to look different from land and sea inside the area.

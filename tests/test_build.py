@@ -172,6 +172,20 @@ def test_vendored_leaflet_matches_integrity_and_page_has_no_cdn():
     assert (web / "vendor/leaflet-1.9.4/LICENSE").exists()
 
 
+def test_built_index_links_are_cache_busted(built):
+    """Every script/stylesheet link in the built index.html carries ?v=<sha256 prefix of that file>, so a changed
+    file always gets a new URL and browsers cannot keep a stale cached copy."""
+    import hashlib
+    import re
+    from build import VERSIONED
+    out, _ = built
+    html = (out.parent / "index.html").read_text()
+    for rel in VERSIONED:
+        v = hashlib.sha256((out.parent / rel).read_bytes()).hexdigest()[:10]
+        assert f'"{rel}?v={v}"' in html, rel
+    assert len(re.findall(r"\?v=[0-9a-f]{10}", html)) == len(VERSIONED)
+
+
 def _first_bin(m, f):
     P = m["products"]
     if f["file"].startswith("frames/hres3h"):

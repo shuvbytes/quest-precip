@@ -14,10 +14,21 @@ function showError(msg) {
   div.textContent = "Could not load the forecast: " + msg;
   document.querySelector(".map-wrap").appendChild(div);
 }
-// Before the page is ready, any error means the forecast did not load: show the banner.
-// After that, an error in one interaction must not replace a working map with "could not load".
+/* Error handling. The banner says "Could not load the forecast", so it is shown only when loading really failed:
+   - main() rejecting is the authoritative signal (see the end of this file);
+   - a window "error" counts only if it comes from THIS site's own scripts and the page is not ready yet.
+   "Script error." with no file name is how browsers report an error inside a script from another origin (details
+   are hidden). This page loads no such script, so it comes from a browser extension or a stale cached page, and
+   must not be shown as a forecast failure (seen in Safari, 13 Nov). Such errors are only logged. */
+function isOwnScriptError(e) {
+  if (!e.filename) return false;                      // opaque cross-origin "Script error."
+  try { return new URL(e.filename, location.href).origin === location.origin; } catch (_) { return false; }
+}
 window.addEventListener("error", (e) => {
-  if (document.body.dataset.status === "ready") { console.error(e.error || e.message); document.body.dataset.lasterror = e.message; }
+  const own = isOwnScriptError(e);
+  document.body.dataset.lasterror = (own ? "" : "[other origin] ") + e.message;
+  if (!own) { console.warn("Ignored an error from a script that is not part of this page:", e.message); return; }
+  if (document.body.dataset.status === "ready") console.error(e.error || e.message);
   else showError(e.message);
 });
 
@@ -54,7 +65,7 @@ async function addBasemap(map, m) {
   L.geoJSON(land, { pane: "land", interactive: false,
     style: { stroke: false, fillColor: m.basemap.land, fillOpacity: 1 } }).addTo(map);
   L.geoJSON(coast, { pane: "lines", interactive: false,
-    style: { color: "#8a8f98", weight: 0.8, fill: false } }).addTo(map);
+    style: { color: "#6b717b", weight: 1.1, fill: false } }).addTo(map);
   L.geoJSON(india, { pane: "lines", interactive: false,
     style: { color: "#2b2f36", weight: 1.4, fill: false } }).addTo(map);
   addForecastEdge(map, m);
@@ -391,6 +402,8 @@ async function main() {
   renderFooter(m);
   render(app);
   setStatus("ready");
+  // The forecast did load, so any banner left by an earlier error would be false: remove it.
+  document.querySelectorAll(".map-wrap .error").forEach((el) => el.remove());
 }
 
 main().catch((e) => showError(e.message));

@@ -306,6 +306,19 @@ User decisions at M5 approval (13 Nov):
   badge at 31 h).
 - **24 h mode fill toggle** is a prominent segmented control ("Rain total / one detailed run (HRES)" vs "Chance of ≥ X mm /
   ensemble (ENS)"), and the map shows "Showing: …" naming the fill. The threshold X drives the chance layer and the marks.
+Changes after the user's review (13 Nov):
+- **Land colour #fdf8ee (cream), sea white, coastline #6b717b 1.1 px** (user-approved). Land-sea dE 2.4 (was 1.5); palest
+  rain 9.1/10.1 and palest chance 8.1/9.4 vs land/sea, so `tests/test_palette.py` passes. A light blue-grey sea was rejected:
+  the palest rain is pale blue, 5.0 on #e8eef3 (fails). A stronger tint would need a darker palest rain (palette decision).
+- **Forecast-area edge** (user-approved): grey veil outside the area (palette.OUTSIDE, 12 %), lighter dashed edge, and a label
+  "Forecast area edge · no data beyond" that follows each side edge on screen.
+- **"Could not load the forecast: Script error."** (seen in Safari): "Script error." is a browser's opaque report of an
+  error inside a script from another origin (an extension, or a stale cached page that still used cdnjs). Reproduced with a
+  cross-origin script throwing during load. Fix: the banner appears only for errors from this site's own scripts before
+  ready, or when main() fails; others are logged ("[other origin]" in data-lasterror); any banner is removed on ready.
+  Verified: cross-origin error → no banner, map ready; missing manifest → banner "data/manifest.json: HTTP 404".
+- **Cache busting**: `build.copy_web` rewrites index.html links to `app.js?v=<sha256[:10]>` (also style.css, vendored
+  Leaflet), so changed files always get new URLs; tested in `test_built_index_links_are_cache_busted`.
 Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/
 1440 px, legends from manifest, footer attribution. Known cosmetic item: at zoom 7–8 the fine dots look slightly uneven
 (non-integer scaling of 12 px/cell).
