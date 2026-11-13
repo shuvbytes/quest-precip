@@ -4,7 +4,7 @@ data/raw/
 *.grib
 *.idx
 
-# Generated site output (published to gh-pages by CI, not to main)
+# Generated site output (built and deployed by GitHub Actions as a Pages artifact; never committed)
 site_build/
 
 __pycache__/
@@ -13,8 +13,8 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 
-# Local Claude Code settings (per machine)
-.claude/settings.local.json
+# Claude Code local files (settings, plans, memory): never published
+.claude/
 
 # Local check plots (regenerate with pipeline/m2_check.py etc.)
 outputs/
