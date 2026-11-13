@@ -13,7 +13,7 @@ import xarray as xr
 
 from ens import read_region
 from packing import read_packing
-from palette import LAND, OCEAN, PROB, RAIN
+from palette import LAND, OCEAN, OUTSIDE, OUTSIDE_OPACITY, PROB, RAIN
 from region import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
 from process import (BINS_3H, BINS_24H, base_time_utc, deaccumulate, interval_floor,
                      lowest_visible, window_totals)
@@ -175,7 +175,7 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
         "generated_utc": _iso(generated_utc),
         "time_note": "All times computed in UTC from the GRIB reference time; IST = UTC+05:30, used for labels only.",
         "region": {"lat_min": LAT_MIN, "lat_max": LAT_MAX, "lon_min": LON_MIN, "lon_max": LON_MAX},
-        "basemap": {"land": LAND, "sea": OCEAN,
+        "basemap": {"land": LAND, "sea": OCEAN, "outside": OUTSIDE, "outside_opacity": OUTSIDE_OPACITY,
                     "note": "Colours from pipeline/palette.py; tests/test_palette.py checks the palest data colours against both."},
         "grid": {"lat_north": grid.lat_n, "lon_west": grid.lon_w, "dlat": grid.dlat, "dlon": grid.dlon,
                  "nlat": grid.nlat, "nlon": grid.nlon,

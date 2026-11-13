@@ -35,10 +35,11 @@ function makeMap(m) {
     attributionControl: false,              // full attribution is in the footer
   });
   // Draw order (bottom -> top): land fill, rain/chance image, disagreement hatch, coast + India boundary lines.
-  [["land", 200], ["fill", 300], ["hatch", 350], ["lines", 450]].forEach(([name, z]) => {
+  // "outside" = shading beyond the forecast area (no data there); it never overlaps the data image.
+  [["land", 200], ["fill", 300], ["outside", 320], ["hatch", 350], ["lines", 450], ["edge-labels", 460]].forEach(([name, z]) => {
     map.createPane(name).style.zIndex = z;
   });
-  map.getPane("lines").style.pointerEvents = "none";
+  ["lines", "outside", "edge-labels"].forEach((p) => { map.getPane(p).style.pointerEvents = "none"; });
   map.getContainer().style.background = m.basemap.sea;
   const b = m.image.bounds;
   map.setMaxBounds(L.latLngBounds(b).pad(0.15));
@@ -56,9 +57,36 @@ async function addBasemap(map, m) {
     style: { color: "#8a8f98", weight: 0.8, fill: false } }).addTo(map);
   L.geoJSON(india, { pane: "lines", interactive: false,
     style: { color: "#2b2f36", weight: 1.4, fill: false } }).addTo(map);
-  // Outline of the area that has forecast data: outside it, "no colour" means "no data", not "no rain".
+  addForecastEdge(map, m);
+}
+
+/* The forecast area: outside it "no colour" means "no data", not "no rain". Shown three ways (user, 13 Nov):
+   a light veil over everything outside, a subtle dashed edge, and an on-map label that follows each side edge
+   so it is readable whenever that edge is on screen (zoomed in, only the two side edges may be visible). */
+function addForecastEdge(map, m) {
+  const [[s, w], [n, e]] = m.image.bounds;
+  const world = [[-85, -180], [85, -180], [85, 180], [-85, 180]];
+  const hole = [[s, w], [n, w], [n, e], [s, e]];
+  L.polygon([world, hole], { pane: "outside", interactive: false, stroke: false,
+    fillColor: m.basemap.outside, fillOpacity: m.basemap.outside_opacity }).addTo(map);
   L.rectangle(m.image.bounds, { pane: "lines", interactive: false,
-    color: "#6b717b", weight: 1, dashArray: "4 4", fill: false }).addTo(map);
+    color: "#9aa0a8", weight: 1, dashArray: "3 5", fill: false }).addTo(map);
+
+  const label = (cls) => L.marker([0, 0], { pane: "edge-labels", interactive: false, keyboard: false,
+    icon: L.divIcon({ className: "edge-label " + cls, html: "<span>Forecast area edge · no data beyond</span>",
+                      iconSize: null }) }).addTo(map);
+  const west = label("edge-w"), east = label("edge-e");
+  const place = () => {
+    const v = map.getBounds();
+    const lat = Math.min(n - 1, Math.max(s + 1, v.getCenter().lat));   // stay on the edge, mid-screen
+    west.setLatLng([lat, w]);
+    east.setLatLng([lat, e]);
+    const showW = v.getWest() < w && w < v.getEast(), showE = v.getWest() < e && e < v.getEast();
+    west.getElement().style.display = showW ? "" : "none";
+    east.getElement().style.display = showE ? "" : "none";
+  };
+  map.on("moveend zoomend", place);
+  place();
 }
 
 /* ---------------- state (kept in the URL hash, so a view can be shared or bookmarked) ---------------- */

@@ -87,3 +87,7 @@ RAIN = [oklch_to_hex(L, C, 250) for L, C in zip(RAIN_L, RAIN_C)]   # blue
 PROB = ramp(6, hue=345, C_max=0.20)  # magenta, even steps, 6 bins: 2-10-25-50-75-90-100
 LAND = "#fafafa"                 # map background, land (neutral; #f4f4f4 failed: palest dE 6.8-7.3)
 OCEAN = "#ffffff"                # map background, sea
+# Veil over everything OUTSIDE the forecast area (no data there). Never overlaps data, so it does not
+# affect the rain/chance contrast; it only has to look different from land and sea inside the area.
+OUTSIDE = "#7d838c"
+OUTSIDE_OPACITY = 0.12

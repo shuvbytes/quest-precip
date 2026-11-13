@@ -119,3 +119,9 @@ body {
   .row select { min-height: 36px; }
   .foot { padding: 8px 12px 12px; }
 }
+
+/* Forecast-area edge labels: small, rotated along the vertical edge, just outside the data area */
+.edge-label span { position: absolute; transform-origin: 0 0; white-space: nowrap;
+  font-size: 0.68rem; color: #5f6670; background: rgba(255,255,255,0.85); padding: 1px 5px; border-radius: 3px; }
+.edge-w span { transform: rotate(-90deg) translate(-50%, -100%); left: -4px; }
+.edge-e span { transform: rotate(90deg) translate(-50%, -100%); left: 4px; }
