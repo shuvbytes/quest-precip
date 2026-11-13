@@ -6,10 +6,12 @@ one decimal, whole %, flag symbols). Then the page is opened headless at #...&p=
 data-field is read back. Each field is compared as text: MATCH / DIFF. The raw GRIB values (before 0.1 mm / 1 %
 storage) are printed alongside, to show the quantisation.
 Usage: python pipeline/m6_check.py <hres_tp file> [mode=24h&fill=chance&x=100&t=60]
+Env M6_QUERY='?api=off' forces the in-browser lookup (otherwise the page asks the point API first).
 """
 from __future__ import annotations
 
 import html
+import os
 import json
 import re
 import sys
@@ -46,7 +48,7 @@ def expected(m, pts, row, col, state):
 
 def page_fields(port, hsh, tries=3):
     for i in range(tries):
-        dom = s.chrome(["--window-size=1440,1000", "--dump-dom"], f"http://127.0.0.1:{port}/index.html#{hsh}").stdout
+        dom = s.chrome(["--window-size=1440,1000", "--dump-dom"], f"http://127.0.0.1:{port}/index.html{os.environ.get('M6_QUERY', '')}#{hsh}").stdout
         point = (re.search(r'data-point="([^"]*)"', dom) or [None, ""])[1]
         if point and point != "loading":
             fields = {k: html.unescape(re.sub(r"<[^>]+>", "", v)).strip()
@@ -80,6 +82,7 @@ def main(hres_path, default_view="mode=24h&fill=chance&x=100&t=60"):
             total_ok += len(ok); total += len(exp)
             w = m["products"]["hres_24h"]["frames"][k]
             print(f"== {name}: clicked {lat}, {lon} -> grid point {glat:.2f}N {glon:.2f}E (page: {point})")
+            print(f"   values from: {got.get('source', '(no source line)')}")
             print(f"   view #{view}; window {w['label_ist']}" + (f"; flag: {fl[0]}, on map: {fl[1]}" if fl else ""))
             for f in ("sum-24h", "near-24h", "sum-ens", "disagree"):
                 if f in exp or f in got:

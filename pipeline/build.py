@@ -5,6 +5,7 @@ Output (git-ignored): site_build/data/
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -184,6 +185,8 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
         "schema": 1,
         "run": {"utc": _iso(base), "ist": ist_label(base), "model": "ECMWF IFS (HRES + ENS), Open Data 0.25°"},
         "generated_utc": _iso(generated_utc),
+        # point API (M7b): the page asks it first and falls back to points.bin; env API_URL overrides (local checks)
+        "api": {"url": os.environ.get("API_URL", API_URL), "timeout_ms": 3000, "name": "forecast API (Hugging Face)"},
         "time_note": "All times computed in UTC from the GRIB reference time; IST = UTC+05:30, used for labels only.",
         "region": {"lat_min": LAT_MIN, "lat_max": LAT_MAX, "lon_min": LON_MIN, "lon_max": LON_MAX},
         "basemap": {"land": LAND, "sea": OCEAN, "outside": OUTSIDE, "outside_opacity": OUTSIDE_OPACITY,
@@ -247,6 +250,8 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
     path.write_text(json.dumps(m, indent=1, ensure_ascii=False))
     return path, m
 
+
+API_URL = "https://shuvayandg-quest-precip-api.hf.space"   # point API on Hugging Face (api/, M7b)
 
 VERSIONED = ("style.css", "app.js", "vendor/leaflet-1.9.4/leaflet.css", "vendor/leaflet-1.9.4/leaflet.js")
 

@@ -109,7 +109,9 @@ app = FastAPI(
         "Source: ECMWF Open Data, CC BY 4.0. Modified: cropped, de-accumulated, converted to mm, rounded to 0.1 mm / 1 %. "
         "ECMWF does not endorse this service."),
 )
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET"], allow_headers=[])
+# DEV_ORIGIN_REGEX: local checks only (e.g. http://127\.0\.0\.1:\d+); unset on the Space, so only the site is allowed.
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_origin_regex=os.environ.get("DEV_ORIGIN_REGEX"),
+                   allow_methods=["GET"], allow_headers=[])
 
 
 @app.exception_handler(RequestValidationError)

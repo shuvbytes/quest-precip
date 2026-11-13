@@ -343,6 +343,49 @@ function pointValue(P, name, lead, row, col) {
   return raw * a.scale;
 }
 
+/* ---------- where the point values come from (M7b) ----------
+   1) the point API (Hugging Face Space, manifest.api), with a short timeout, accepted only if it serves the same
+      forecast build as this page; 2) otherwise the in-browser lookup in points.bin (downloaded once).
+   Both give {val(name, lead), near(name, lead), note}, so the panel has one renderer. ?api=off forces 2 (checks). */
+const API_OFF = new URLSearchParams(location.search).get("api") === "off";
+
+async function apiPoint(m, point) {
+  const ctl = new AbortController(), t0 = performance.now();
+  const timer = setTimeout(() => ctl.abort(), m.api.timeout_ms);
+  try {
+    const r = await fetch(`${m.api.url}/point?lat=${point.lat}&lon=${point.lon}`, { signal: ctl.signal });
+    if (!r.ok) throw new Error(`API answered with error ${r.status}`);
+    const j = await r.json();
+    if (j.run.utc !== m.run.utc || j.run.generated_utc !== m.generated_utc)
+      throw new Error(`API has a different forecast build (run ${j.run.utc}, built ${j.run.generated_utc})`);
+    if (j.grid_point.row !== point.row || j.grid_point.col !== point.col) throw new Error("API chose another grid point");
+    return { j, ms: Math.round(performance.now() - t0) };
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error(`API did not answer within ${m.api.timeout_ms / 1000} s`);
+    if (e instanceof TypeError) throw new Error("API could not be reached");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function apiSource(m, j, ms) {
+  const keys = m.products.ens_prob.thresholds_mm.map(thrKey);
+  const val = (name, lead) => name === "ens_prob" ? j.ens_chance[keys[lead[0]]][lead[1]].pct : j[name][lead[0]].mm;
+  const near = (name, lead) => [j[name][lead[0]].nearby_min_mm, j[name][lead[0]].nearby_max_mm];
+  return { kind: "api", val, near, note: `${m.api.name} · answered in ${ms} ms` };
+}
+
+function localSource(m, P, point, reason) {
+  const g = m.grid, { row, col } = point;
+  return {
+    kind: "local",
+    val: (name, lead) => pointValue(P, name, lead, row, col),
+    near: (name, lead) => nearby((r, c) => pointValue(P, name, lead, r, c), row, col, g.nlat, g.nlon),
+    note: "in-browser lookup (points.bin)" + (reason ? ` · ${reason}` : ""),
+  };
+}
+
 /* Nearest grid point to (lat, lon); null if outside the forecast area (the image covers the cell edges). */
 function gridPoint(m, lat, lon) {
   const g = m.grid;
@@ -413,21 +456,31 @@ function renderPoint(app) {
   const content = el("div", "point-content");
   body.appendChild(content);
   const loading = el("div", "loading");
-  const label = el("span", null, "Loading point data (first time only)…");
+  const label = el("span", null, "Asking the forecast API…");
   const bar = el("progress");
   bar.max = 100;
   loading.append(label, bar);
   content.appendChild(loading);
   document.body.dataset.point = "loading";
-  loadPoints(m, (got, total) => {
-    const pct = Math.min(100, Math.round(100 * got / total));
-    bar.value = pct;
-    // percent only: the decoded size (3.7 MB) is not what is downloaded (~0.6 MB gzip on GitHub Pages)
-    label.textContent = `Loading point data (first time only)… ${pct} %`;
-  }).then((P) => {
-    app.P = P;
-    if (app.point === point) renderPointContent(app);
-  }).catch((e) => {
+  app.src = null;
+  const useApi = m.api && !API_OFF;
+  (useApi ? apiPoint(m, point) : Promise.reject(new Error(m.api ? "API switched off (?api=off)" : "")))
+    .then(({ j, ms }) => apiSource(m, j, ms))
+    .catch((e) => {
+      if (useApi) console.info("Point API not used:", e.message);
+      if (!app.P) label.textContent = "Loading point data (first time only)…";
+      return loadPoints(m, (got, total) => {
+        const pct = Math.min(100, Math.round(100 * got / total));
+        bar.value = pct;
+        // percent only: the decoded size (3.7 MB) is not what is downloaded (~0.6 MB gzip on GitHub Pages)
+        label.textContent = `Loading point data (first time only)… ${pct} %`;
+      }).then((P) => { app.P = P; return localSource(m, P, point, e.message); });
+    })
+    .then((src) => {
+      if (app.point !== point) return;           // another point was selected meanwhile
+      app.src = src;
+      renderPointContent(app);
+    }).catch((e) => {
     content.innerHTML = "";
     const p = el("p", "err", `Could not load the point data: ${e.message}`);
     const retry = el("button", null, "Retry");
@@ -616,13 +669,12 @@ function drawChart(app, container, val) {
 
 /* Window summary, nearby range, disagreement sentence, 24 h table (and, step 4, the 3 h chart). */
 function renderPointContent(app) {
-  const { m, P, point } = app;
+  const { m, src, point } = app;
   const content = $("point-body").querySelector(".point-content");
-  if (!content || !P || !point) return;
+  if (!content || !src || !point) return;
   content.innerHTML = "";
-  const Pr = m.products, g = m.grid, { row, col } = point, idx = row * g.nlon + col;
-  const val = (name, lead) => pointValue(P, name, lead, row, col);
-  const near = (name, lead) => nearby((r, c) => pointValue(P, name, lead, r, c), row, col, g.nlat, g.nlon);
+  const Pr = m.products, g = m.grid, idx = point.row * g.nlon + point.col;
+  const { val, near } = src;
 
   // 1. selected window summary (follows mode + slider)
   const sum = el("div", "summary");
@@ -721,7 +773,11 @@ function renderPointContent(app) {
   wrap.scrollLeft = Math.max(0, firstTh.offsetLeft - head.children[1].offsetLeft);
   content.appendChild(el("p", "sub", "Chances in %. Values below the map's lowest step are shown as “< …”."));
 
+  const so = el("p", "sub source", `Values from: ${src.note}`);
+  so.dataset.field = "source";
+  content.appendChild(so);
   document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
+  document.body.dataset.source = src.kind;
 }
 
 /* ---------------- render ---------------- */
@@ -770,7 +826,7 @@ function render(app) {
   $("showing").appendChild(s);
 
   renderLegend(m, f);
-  if (app.point && app.P) renderPointContent(app);
+  if (app.point && app.src) renderPointContent(app);
 
   // For checks: what is on screen
   document.body.dataset.frame = f.file + (hatchFile ? " + " + hatchFile : "");
@@ -950,6 +1006,8 @@ async function main() {
   renderHeader(m);
   renderFooter(m);
   render(app);
+  // wake the point API early (a sleeping free Space takes a while); errors are irrelevant here
+  if (m.api && !API_OFF) fetch(`${m.api.url}/health`).catch(() => {});
   if (state.p) selectPoint(app, state.p[0], state.p[1], false);   // shared link with a selected point
   setStatus("ready");
   // The forecast did load, so any banner left by an earlier error would be false: remove it.
