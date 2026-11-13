@@ -83,6 +83,7 @@ function go() {{
   if (!d || !d.body || d.body.dataset.status !== "ready") return setTimeout(go, 100);
   const mc = d.getElementById("map"), label0 = d.getElementById("t-label").textContent;
   const key = (k) => mc.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: k, keyCode: {{ArrowRight: 39, Enter: 13, Escape: 27}}[k], bubbles: true }}));
+  d.dispatchEvent(new w.KeyboardEvent("keydown", {{ key: "Tab", bubbles: true }}));   // a real user tabs to the map
   mc.focus();
   out("crosshair", d.getElementById("crosshair").hidden ? "hidden" : "visible");
   const c0 = w.__map ? "" : "";
@@ -106,6 +107,29 @@ f.addEventListener("load", go);
 </script></body></html>"""
 
 
+# Crosshair test: it must appear only for keyboard use, never for mouse/touch.
+CROSS = """<!doctype html><html><body data-status="loading"><iframe id="f" src="index.html#mode=3h&t=33" style="width:1200px;height:800px;border:0"></iframe>
+<script>
+const f = document.getElementById("f");
+function go() {
+  const w = f.contentWindow, d = f.contentDocument;
+  if (!d || !d.body || d.body.dataset.status !== "ready") return setTimeout(go, 100);
+  const mc = d.getElementById("map"), ch = () => (d.getElementById("crosshair").hidden ? "hidden" : "VISIBLE");
+  const ptr = () => mc.dispatchEvent(new w.PointerEvent("pointerdown", { bubbles: true }));
+  const key = (k, target) => (target || d).dispatchEvent(new w.KeyboardEvent("keydown", { key: k, bubbles: true }));
+  const r = [];
+  ptr(); mc.focus(); r.push("1 mouse click focuses map: " + ch());
+  mc.blur(); key("Tab"); mc.focus(); r.push("2 Tab onto map: " + ch());
+  ptr(); r.push("3 mouse press after keyboard: " + ch());
+  key("ArrowRight", mc); r.push("4 arrow key on mouse-focused map: " + ch());
+  mc.blur(); r.push("5 map loses focus: " + ch());
+  document.body.dataset.result = r.join(" | ");
+  document.body.dataset.status = "done";
+}
+f.addEventListener("load", go);
+</script></body></html>"""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -113,6 +137,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
+        if u.path == "/__cross.html":
+            return self._send(CROSS.encode())
         if u.path == "/__keys.html":
             return self._send(KEYS.format(hash=q.get("hash", ["mode=3h&t=33"])[0]).encode())
         if u.path == "/__stress.html":
@@ -194,6 +220,16 @@ def keys(hsh="mode=3h&t=33"):
           f"      URL hash after selection={get('hash')}")
 
 
+def crosshair():
+    httpd, port = serve()
+    try:
+        dom = chrome(["--window-size=1300,900", "--dump-dom"], f"http://127.0.0.1:{port}/__cross.html").stdout
+    finally:
+        httpd.shutdown()
+    res = (re.search(r'data-result="([^"]*)"', dom) or [None, "?"])[1]
+    print("crosshair:\n  " + "\n  ".join(res.split(" | ")))
+
+
 def main(specs):
     httpd, port = serve()
     try:
@@ -210,6 +246,8 @@ def main(specs):
 if __name__ == "__main__":
     if sys.argv[1:2] == ["stress"]:
         stress(*sys.argv[2:3])
+    elif sys.argv[1:2] == ["crosshair"]:
+        crosshair()
     elif sys.argv[1:2] == ["keys"]:
         keys(*sys.argv[2:3])
     else:

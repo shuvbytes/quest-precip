@@ -821,9 +821,16 @@ function wire(app) {
   const mc = map.getContainer();
   mc.setAttribute("aria-label",
     "Forecast map. Arrow keys move the map, plus and minus zoom, Enter shows the forecast at the centre cross, Escape closes it.");
-  mc.addEventListener("focus", () => { $("crosshair").hidden = false; });
-  mc.addEventListener("blur", () => { $("crosshair").hidden = true; });
+  // Show the crosshair only for KEYBOARD use (user, 13 Nov): a click also focuses the map, so remember how the user
+  // last interacted. Pointer (mouse/touch/pen) hides it at once; a key press while the map has focus shows it.
+  let lastInput = "pointer";
+  const cross = (on) => { $("crosshair").hidden = !on; };
+  document.addEventListener("keydown", () => { lastInput = "keyboard"; }, true);
+  document.addEventListener("pointerdown", () => { lastInput = "pointer"; cross(false); }, true);
+  mc.addEventListener("focus", () => cross(lastInput === "keyboard"));
+  mc.addEventListener("blur", () => cross(false));
   mc.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") cross(true);                 // keyboard use on the focused map
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       const c = map.getCenter();
