@@ -47,8 +47,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
       summed 3 h amounts, locate the 505 mm max and compare with ECMWF's chart for this run.
 - [x] M3 ENS tpg* probabilities; P(≥10 mm) map; Bay P(≥50/100) check
 - [x] M4 3857 PNGs + manifest + point grid; alignment check (real transfer size: measure in M7 after deploy).
-      Disagreement layer: proposed, awaiting approval, not built.
-- [ ] M5 Leaflet front end locally
+      Disagreement layer: approved and built (min cluster 3 on map).
+- [x] M5 Leaflet front end locally (13 Nov)
 - [ ] M6 client-side point forecast panel (lazy-loaded)
 - [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
 - [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
@@ -273,30 +273,49 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
   than in the 00z run. Plausible, not a bug.
 - `site_build/data/` now holds the 12z build.
 
+## M5 — map page (13 Nov) — `web/`, `pipeline/make_geo.py`, `pipeline/m5_screens.py`
+How to run: `python pipeline/build.py data/raw/hres_tp_<run>.grib2 data/raw/ens_tpg_<run>.grib2` (copies `web/` into
+`site_build/` next to `data/`), then `cd site_build && python -m http.server 8000` and open http://localhost:8000/.
+Must be served over http (browsers block fetch() from file://). Screenshots (dev): `python pipeline/m5_screens.py
+"name=WxH#hash[@scrollY]"`; it emulates true phone widths with an iframe wrapper served only by the dev server.
+Web decisions:
+- Plain HTML/CSS/JS, no framework/build step. Leaflet 1.9.4 from cdnjs, pinned, SRI hashes verified against the files.
+- **No tile server.** Own basemap: Natural Earth 10 m land (fill #fafafa = palette.LAND) + coastline lines, white sea
+  (palette.OCEAN), so the contrast test covers the basemap; no third-party borders. India boundary line on top from
+  DataMeet `india-composite.geojson` (pinned commit `b3fbbde595`, SHA-256 checked). **Licence verified:** folder README
+  says "CC-0" for this file (explicit statement beats the repo-wide "CC BY 4.0 unless explicitly stated"; MIT LICENSE
+  covers software). Attribution given anyway; quotes in `web/geo/SOURCES.md`.
+- Panes: land → data image → hatch → coast + India lines. Dashed rectangle = area with forecast data.
+- `image-rendering: pixelated`: cells stay sharp squares (no invented detail).
+- All labels, bins, colours, units, rule text, attribution come from manifest.json. IST shown from the manifest; header
+  times computed as UTC + 05:30 with UTC formatting (never the viewer's time zone).
+- View state in the URL hash (`#mode=24h&fill=chance&x=100&t=60&hatch=1[&z=7&c=lat,lon]`): shareable, used for checks.
+  A hash view is applied without animation (bug found: zoom read mid-animation showed bold marks at zoom 7).
+User decisions at M5 approval (13 Nov):
+- **Initial view = fit the region on every screen** (≈ zoom 4.75 desktop 1440×900, 3.75–4 phones; minZoom 3). This
+  supersedes the 12 Nov "start at zoom 6". The amber note "Zoom in to see disagreement marks" is shown on load (24 h
+  mode, hatch on, zoom < 6), and **bold hatch** frames (`disagree-bold_*`, 4 px/cell, thick stripes/big dots) are
+  used below zoom 6; fine ones (12 px/cell) from zoom 6.
+- **Staleness badge** "Older than usual: newer runs may exist" when the run is **> 30 h** old (checked: none at 29 h,
+  badge at 31 h).
+- **24 h mode fill toggle** is a prominent segmented control ("Rain total / one detailed run (HRES)" vs "Chance of ≥ X mm /
+  ensemble (ENS)"), and the map shows "Showing: …" naming the fill. The threshold X drives the chance layer and the marks.
+Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/
+1440 px, legends from manifest, footer attribution. Known cosmetic item: at zoom 7–8 the fine dots look slightly uneven
+(non-integer scaling of 12 px/cell).
+
 ## Next steps
-**M5 — 13 Nov morning, wait for the user's go-ahead.** Leaflet front end (static, no build step), run locally
-with `python -m http.server` from `site_build/` after `python pipeline/build.py ...`. Requirements gathered so far
-(all values from manifest.json, nothing hard-coded):
-- Initial view: fit the region; at desktop size this should be about zoom 6. Below zoom 6, show the zoom note for marks.
-- Basemap: no political borders + India official boundary GeoJSON (source cited); it must pass the palette
-  background check (palest step ≥ dE 8 vs the basemap, as in `tests/test_palette.py`).
-- Layers: HRES 3 h mode; 24 h mode = HRES total + ENS P(≥X) (X selector) + disagreement hatch (on by default,
-  toggle). L.imageOverlay with manifest bounds; CSS `image-rendering: pixelated` (check the zoom-7 dot clipping).
-- Time slider with exact IST labels from the manifest; run time in UTC + IST; "last updated".
-- Legends from manifest bins/colours; "amounts below 0.5 mm (3 h) / 1 mm (24 h) not shown".
-- Attribution: manifest `attribution` (ECMWF, CC BY 4.0, modification notice).
-- (M6) point panel: lazy-load points.bin; agreed wording + "nearby: X–Y mm"; disagreement sentence from
-  `cells_*` + `point_text`.
-**(Done) M4 original spec, kept for reference:** render EPSG:3857 PNGs (3 h + 24 h HRES, ENS
-probabilities) using `palette.py` and the fixed legends, with per-frame floor flags; manifest.json (run time UTC,
-IST labels, windows, units, bins, floor_i, source, licence); point grid (uint16 0.1 mm + uint8 %); coastline
-alignment check; report the real compressed transfer size.
+**M6 — point panel** (after the user's go-ahead): click → lazy-load `data/points.bin` (layout in manifest `points`);
+show the agreed wording "Model value at the nearest grid point (0.25°, ~25 km spacing). Rain can vary a lot within that
+distance." + "nearby: X–Y mm" (3×3 min–max); 3 h bars + 24 h total for the current window + ENS chances ladder;
+disagreement sentence from `cells_wetter/cells_drier` + `point_text` (every flagged cell, even isolated ones). Check:
+click Chennai / the Bay cell and compare with a Python printout of the same cell and window.
 
 ## Remaining schedule (agreed 12 Nov)
 | Day (IST) | Work |
 |---|---|
 | 12 Nov evening (after break) | M4 — **done**, plus disagreement layer and GitHub backup |
-| 13 Nov (from morning) | M5 Leaflet front end (locally), M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
+| 13 Nov (from morning) | M5 Leaflet front end (locally) — **done**, M6 point panel (wording + "nearby: X–Y mm"), M7 Pages deploy via deploy-pages (public URL) |
 | 14 Nov | M7b FastAPI /point (HF Spaces, Render fallback); automation (GitHub Actions cron 2×/day, 00z/12z run selection); M8 polish ("last updated", README). Target: app finished by the night of 14 Nov |
 | 14 Nov night | IMD-day (08:30–08:30 IST) HRES view, only if M8 is done |
 | 15 Nov | Buffer only: fixes, no new features. Hard stop at start + 72 h |
