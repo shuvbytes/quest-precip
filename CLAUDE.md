@@ -50,7 +50,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
       Disagreement layer: approved and built (min cluster 3 on map).
 - [x] M5 Leaflet front end locally (13 Nov)
 - [x] M6 client-side point forecast panel (lazy-loaded) — 13 Nov
-- [ ] M7 GitHub Actions + Pages deploy via deploy-pages (public URL)
+- [x] M7 GitHub Actions + Pages deploy via deploy-pages — live at https://shuvbytes.github.io/quest-precip/ (13 Nov)
 - [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
 - [ ] M8 honesty/UX polish, "last updated", README
 - [ ] IMD-day (08:30–08:30 IST) view: 14 Nov night, only if M8 is done
@@ -161,12 +161,11 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (13 Nov, evening IST): M0–M6 done; M7 next
-**M0–M6 done; 42 tests passing; pushed to GitHub (13 Nov evening).** M6 closed by the user after confirming
+## Status (13 Nov, night IST): M0–M7 done; live at https://shuvbytes.github.io/quest-precip/
+**M0–M7 done; 42 tests passing; repo public; site deployed by GitHub Actions (see M7 section).** Earlier (evening): M6 closed by the user after confirming
 both keyboard fixes in Safari (the ring lands on the crosshair). Earlier (afternoon): M0–M5 done. The map page runs locally and was checked by the user in Safari (all five check
 views correct; console errors traced to a Safari extension and gone). Backed up to GitHub:
-**https://github.com/shuvbytes/quest-precip** (private, branch `main`). Pages not enabled yet (M7).
-Before making the repo public, re-check tracked files (now also `web/`, incl. vendored Leaflet + source map).
+**https://github.com/shuvbytes/quest-precip** (public since 13 Nov, branch `main`).
 Local server for checks: `python3 -m http.server 8000 --bind 127.0.0.1 --directory site_build` → http://127.0.0.1:8000/.
 
 Earlier review questions, all resolved:
@@ -210,7 +209,9 @@ Commits so far:
 | `42a3b24` + this commit | M5 closed; status updated and pushed to GitHub (13 Nov) |
 | `4bcbbd9` … `7edceb3` | M6 steps 1–6: exact 24 h array, selection + lazy points.bin, summary/table, SVG chart, keyboard/phone, exact-match check |
 | `911cd0d`, `c202a2e`, `191cbe7` | Crosshair keyboard-only; Enter selects exactly under it; crosshair reaches every grid point |
-| this commit | M6 closed; M8 point-card idea recorded; pushed |
+| `58aecca` | M6 closed; M8 point-card idea recorded; pushed |
+| `9564dbd` | Wetter sentence: "Rain of X mm or more…" below 50 mm, "Heavy rain…" from 50 mm |
+| `…` → this commit | M7: .gitignore audit, `fetch.py --print-latest`, workflow, progress-bar fix, skip-step fix, M7 notes |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -233,8 +234,7 @@ Checks (dev): `pipeline/inspect_grib.py`, `packing.py`, `m2_check.py`, `diagnose
 - points.bin: HRES 3 h uint16 (0.1 mm) 1,800,288 B + ENS uint8 (%) 1,443,981 B = 3,244,269 B raw; gzip -9
   520,561 B (gzip -6 533,957). Decode test: within 0.1 mm / 1 %. The browser's 24 h point value = sum of 8 decoded
   3 h values: within ±0.35 mm of the map's TP(t+24) − TP(t) (never ≥ 0.5 mm), so no separate 24 h array.
-- **Open for M7:** GitHub Pages may not gzip `application/octet-stream`. Measure the real transfer with curl after
-  deploy. If it is not compressed, ship `points.bin.gz` and decompress in the browser (DecompressionStream).
+- **Resolved in M7:** GitHub Pages does gzip points.bin (619,848 B on the wire), so no .gz file is shipped.
 
 ## Disagreement layer (approved and built 12 Nov evening) — `pipeline/disagree.py`
 - Rule (user-approved): X = selected ENS threshold. **Wetter:** HRES ≥ X at the point and ENS P(≥X) < 25 % at the
@@ -413,10 +413,33 @@ chip, a disagreement badge, a 6-day sparkline, and a "Full details" button that 
 Updates with the slider; Esc/× closes; bottom sheet on phones; keyboard-accessible. **Reuse the panel's data code**
 (selection, points.bin decode, formatting, flag lookup) rather than duplicating it.
 
+## M7 — GitHub Actions + Pages (13 Nov) — `.github/workflows/deploy.yml`
+- **Live URL: https://shuvbytes.github.io/quest-precip/** (repo made public 13 Nov after an audit: 48 tracked files, no
+  data/GRIB/points.bin/manifest/site_build/.claude now or in history, no token-like strings; the commit email stays public,
+  user's choice). `.gitignore` now ignores all of `.claude/`. Pages source = "GitHub Actions" (no gh-pages branch).
+- **Schedule (UTC):** 08:23 and 20:23 (13:53 / 01:53 IST), backups 10:23 and 22:23. Why: measured Last-Modified on
+  data.ecmwf.int (13 Nov 00z, 12 Nov 12z): HRES to 144 h 07:34 / 19:34, ENS ep 08:01 / 20:01 UTC; ~20 min margin; minute
+  :23 avoids top-of-hour congestion where GitHub delays/drops scheduled runs. Scheduled runs compare
+  `fetch.py --print-latest` with the live manifest `run.utc` and skip if equal (no redeploy of the same forecast).
+  **No scheduled run observed yet** (first one due 20:23 UTC, 13 Nov) — check its result.
+- Job `build`: checkout → micromamba with the light `environment.yml` (cached) → newer-run check → fetch (HRES 21.8 MB,
+  ENS 28.8 MB) → `pytest` (41 passed, 1 skipped: the test pinned to 12 Nov 00z files) → build → upload-pages-artifact.
+  Job `deploy`: deploy-pages. Manual: `gh workflow run deploy.yml` (inputs `skip_if_unchanged`, `force_fail` for tests).
+- **Verified on GitHub:** deploy (runs 43442536316, 43443561328); forced failure → build failed, deploy skipped, live
+  `generated_utc` unchanged (43443936651); skip path → build success, deploy skipped (43444392922). Bug found: an explicit
+  `exit 0` in the `bash -el` login shell runs ~/.bash_logout, which returns 1 on the runner → the step failed; fixed.
+- **Transfer sizes (curl, live):** Pages gzips everything incl. `application/octet-stream`: points.bin 3,656,835 B →
+  **619,848 B** on the wire; manifest.json 16,070 B; app.js 16,445 B; leaflet.js 43,194 B; land.geojson 32,673 B. So no
+  pre-compressed .gz/DecompressionStream needed.
+- **Bug found by the gzip:** the progress bar used Content-Length (compressed size) as the total while the stream yields
+  decoded bytes → bar hit 100 % after 17 % of the data. Now total = manifest `points.bytes`, label shows % only. Seen on
+  the live site in headless Chrome mid-download: "… 53 %".
+- Live panel check (headless, Python decoding of the live points.bin): Chennai, Bay (t=60 and t=96, X = 100) 417/417
+  fields exact; the dry central-India capture always snapshotted mid-download (test timing, not an app error).
+
 ## Next steps
-**M7 — GitHub Actions + Pages deploy** (14 Nov per schedule; 13 Nov evening if time): workflow that fetches the latest
-00z/12z run, builds `site_build/`, runs the tests, and deploys with `actions/upload-pages-artifact` + `deploy-pages`;
-public URL; measure the real transfer size of points.bin (gzip by Pages or not → ship .gz + DecompressionStream).
+1. User verifies the live site on laptop + phone (checklist given 13 Nov). 2. Check the first scheduled run
+(20:23 UTC 13 Nov → 12z run). 3. M7b FastAPI /point (14 Nov). 4. M8 polish incl. point card, README.
 
 ## Remaining schedule (agreed 12 Nov)
 | Day (IST) | Work |
