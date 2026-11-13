@@ -51,7 +51,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
 - [x] M5 Leaflet front end locally (13 Nov)
 - [x] M6 client-side point forecast panel (lazy-loaded) — 13 Nov
 - [x] M7 GitHub Actions + Pages deploy via deploy-pages — live at https://shuvbytes.github.io/quest-precip/ (13 Nov)
-- [ ] M7b FastAPI /point on HF Spaces (Render fallback), 14 Nov afternoon
+- [x] M7b FastAPI /point — live on Render free tier at https://quest-precip-api.onrender.com (13 Nov night; HF dropped)
 - [ ] M8 honesty/UX polish, "last updated", README
 - [ ] IMD-day (08:30–08:30 IST) view: 14 Nov night, only if M8 is done
 - [ ] Buffer (15 Nov): fixes only, no new features
@@ -161,8 +161,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (13 Nov, night IST): M0–M7 done; live at https://shuvbytes.github.io/quest-precip/
-**M0–M7 done; 42 tests passing; repo public; site deployed by GitHub Actions (see M7 section).**
+## Status (14 Nov, ~01:40 IST): M0–M7b done; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
+**M0–M7b done; 67 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
 **Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
 slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
 both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check (Android Chrome): portrait OK; landscape poor → M8 item D. Earlier (evening): M6 closed by the user after confirming
@@ -214,7 +214,11 @@ Commits so far:
 | `911cd0d`, `c202a2e`, `191cbe7` | Crosshair keyboard-only; Enter selects exactly under it; crosshair reaches every grid point |
 | `58aecca` | M6 closed; M8 point-card idea recorded; pushed |
 | `9564dbd` | Wetter sentence: "Rain of X mm or more…" below 50 mm, "Heavy rain…" from 50 mm |
-| `…` → this commit | M7: .gitignore audit, `fetch.py --print-latest`, workflow, progress-bar fix, skip-step fix, M7 notes |
+| `04cf9d9` … `cf35771` | M7: .gitignore audit, `fetch.py --print-latest`, workflow, progress-bar fix, skip-step fix, M7 notes |
+| `7444592` … `1afe683` | M7b: pointcore (shared logic), FastAPI app + tests, page asks API first with fallback + source line |
+| `5e96c69`, `8a7db0a` | HF dropped (Docker SDK now paid); Render free web service, native Python, gzip |
+| `35e488a` | API follows a new site build at once (`/health?check=1`, 60 s checks, deploy loop) |
+| this commit | M7b live checks + cold start recorded |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -474,11 +478,48 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Live panel check (headless, Python decoding of the live points.bin): Chennai, Bay (t=60 and t=96, X = 100) 417/417
   fields exact; the dry central-India capture always snapshotted mid-download (test timing, not an app error).
 
+## M7b — point API on Render (13–14 Nov) — `api/`
+- **Live: https://quest-precip-api.onrender.com** (`/point?lat=&lon=[&x=][&t=]`, `/health[?check=1]`, `/docs`, `/` → `/docs`).
+  Render free web service, native Python runtime (no Docker), region Singapore, created by the user in the form:
+  root `api`, build `pip install -r requirements.txt`, start `uvicorn app:app --host 0.0.0.0 --port $PORT`, health check
+  `/health`, env `PYTHON_VERSION=3.11.18` (= tested env; Render's default is 3.14), Auto-Deploy on commit, build filter `api/**`.
+  No secrets anywhere (Render's GitHub app has access to this repo only).
+- **Why not Hugging Face:** HF now lists the Docker SDK as paid (user, 13 Nov). The HF workflow + Dockerfile were removed before
+  any push (`5e96c69`), so no failing job ever ran.
+- **Render free tier (checked 13 Nov):** 512 MB RAM, 0.1 CPU; sleeps after 15 min without requests, ~1 min to wake;
+  750 instance hours/month/workspace; Hobby plan 500 build minutes and **5 GB outbound/month** → responses gzipped
+  (/point 33.8 kB → 3.3 kB, ~1.5 M answers per 5 GB); ephemeral disk (fine: data is reloaded from Pages at start).
+- **Design:** `api/pointcore.py` (numpy only) = the panel's rules (nearest grid point, floor texts, 3×3 nearby, flags with the
+  on-map cluster check, threshold wording); `pipeline/m6_check.py` uses it, so page == pointcore == API. `api/app.py` loads
+  manifest.json + points.bin from the live Pages site, checks every 60 s (conditional GET, normally 304) and swaps when
+  `generated_utc` changes; a failed refresh keeps the old data. 422 with a plain message for bad input (incl. NaN, unknown
+  x/t), 404 "No forecast here: … outside the forecast area, 5–38°N, 65–100°E." CORS only `https://shuvbytes.github.io`
+  (`DEV_ORIGIN_REGEX` env for local checks only).
+- **Page:** asks the API first (3 s timeout, `manifest.api`), accepts only the same build + grid point, else uses
+  points.bin; the panel shows "Values from: forecast API (Render) · answered in N ms" or "in-browser lookup (points.bin) ·
+  <reason>". Pings `/health` on load to start waking a sleeping service. `?api=off` forces the local path.
+- **Sync bug found live and fixed (`35e488a`):** after a Pages redeploy the site had build 19:45Z, the API 14:32Z (the deploy
+  nudge came < 5 min after the API's last check) → the page correctly fell back. Now 60 s checks, `/health?check=1` checks
+  at once (≥ 15 s apart), and the deploy job calls it until the API reports the deployed build.
+- **Checks (13 Nov, live):** curl: 3 places, 404/422 messages, gzip, CORS (site origin gets the header; other origins none;
+  foreign preflight 400), `/docs` loads. API vs live points.bin: **561/561** values + texts (Chennai, Bay, dry). Live page in
+  real-clock headless Chrome (DevTools protocol; simulated-clock headless proved unreliable for timeouts and downloads):
+  **695/695 via the API, 695/695 with `?api=off`** (5 views). Local real-clock fallback tests: API down → "could not be
+  reached"; 6 s slow → "did not answer within 3 s" (switches at 3 s); other build → "different forecast build (…)"; all with
+  the same values. 67 tests (incl. 15 API tests) run in CI.
+- **Cold start (measured 13 Nov 20:09 UTC, after 17 min without requests; one sample):** `curl /health` → HTTP 200 after
+  **32.5 s** (first byte; the app's own log shows data loaded 23 s into the wake). Meanwhile the live page (Bay, X = 100,
+  t = 60) showed "Asking the forecast API…" and at 3 s fell back: "in-browser lookup (points.bin) · API did not answer
+  within 3 s", value 28.3 mm. Reloaded once awake: "forecast API (Render) · answered in 216 ms", same 28.3 mm.
+  **Warm /point latency** (10 requests from India, gzip): min 0.16 s, median 0.18 s, max 0.33 s. So a sleeping API costs
+  the visitor nothing but the 3 s wait on the first click (then points.bin, ~0.6 MB); the page's load-time `/health`
+  ping usually wakes it before later clicks. Render's docs say ~1 min to wake; we saw ~32 s.
+
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
 0. Check the first scheduled run (20:23 UTC 13 Nov → 12z run) succeeded/skipped.
 1. **M8 A + B**: place names (cities, country labels, state lines, local search, "Near <city>") and grid-step keyboard
    navigation with live readout; then **M8 D** (short screens / landscape phones).
-2. **M7b** FastAPI `/point` (HF Spaces, Render fallback; browser lookup stays as fallback).
+2. ~~M7b~~ done 13 Nov night (Render).
 3. **M8 C**: point card, then README (vector hatch if time).
 4. IMD-day view only if all of the above is done; 15 Nov buffer only.
 
@@ -487,6 +528,6 @@ visible; header scrolled away; region does not fit). Build after A and B:
 |---|---|
 | 12 Nov evening (after break) | M4 — **done**, plus disagreement layer and GitHub backup |
 | 13 Nov (from morning) | M5 Leaflet front end — **done**, M6 point panel — **done**, M7 Pages deploy — **done** (live URL) |
-| 14 Nov | (reordered 13 Nov night) M8 A+B place names + keyboard → M7b FastAPI /point → point card + README. Automation already done in M7. Target: app finished by the night of 14 Nov |
+| 14 Nov | (reordered 13 Nov night; M7b already done 13 Nov night) M8 A+B place names + keyboard → M8 D → point card + README. Automation already done in M7. Target: app finished by the night of 14 Nov |
 | 14 Nov night | IMD-day (08:30–08:30 IST) HRES view, only if M8 is done |
 | 15 Nov | Buffer only: fixes, no new features. Hard stop at start + 72 h |
