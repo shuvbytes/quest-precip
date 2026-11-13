@@ -343,6 +343,10 @@ function wire(app) {
 }
 
 async function main() {
+  if (typeof L === "undefined") {
+    throw new Error("the map library (Leaflet, vendor/leaflet-1.9.4/leaflet.js) did not load. " +
+      "Reload the page; if it persists, check the browser console for the blocked file.");
+  }
   const m = await getJSON(DATA + "manifest.json");
   const view = readHash(m);
   const map = makeMap(m);

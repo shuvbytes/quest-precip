@@ -279,7 +279,13 @@ How to run: `python pipeline/build.py data/raw/hres_tp_<run>.grib2 data/raw/ens_
 Must be served over http (browsers block fetch() from file://). Screenshots (dev): `python pipeline/m5_screens.py
 "name=WxH#hash[@scrollY]"`; it emulates true phone widths with an iframe wrapper served only by the dev server.
 Web decisions:
-- Plain HTML/CSS/JS, no framework/build step. Leaflet 1.9.4 from cdnjs, pinned, SRI hashes verified against the files.
+- Plain HTML/CSS/JS, no framework/build step. **Leaflet 1.9.4 is vendored in `web/vendor/leaflet-1.9.4/`** (same files as
+  cdnjs 1.9.4 + BSD-2 LICENSE; SRI hashes kept and checked by `tests/test_build.py`). Changed 13 Nov from cdnjs: in
+  Safari a new tab failed with "can't find variable: L" because Leaflet did not load from the CDN, while every
+  same-origin file was fine (reproduced by blocking cdnjs). The site now has no external dependency at all.
+- URL hash writes are debounced (400 ms, only if changed, try/catch): Safari throws "SecurityError" after 100
+  replaceState calls / 10 s, and Chrome silently drops them (the URL had shown the wrong window). The error banner is
+  only for load failures; later errors are logged. Check: `python pipeline/m5_screens.py stress`.
 - **No tile server.** Own basemap: Natural Earth 10 m land (fill #fafafa = palette.LAND) + coastline lines, white sea
   (palette.OCEAN), so the contrast test covers the basemap; no third-party borders. India boundary line on top from
   DataMeet `india-composite.geojson` (pinned commit `b3fbbde595`, SHA-256 checked). **Licence verified:** folder README

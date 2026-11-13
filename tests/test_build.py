@@ -152,6 +152,26 @@ def test_site_files_and_basemap_colours(built):
     assert m["region"] == {"lat_min": 5.0, "lat_max": 38.0, "lon_min": 65.0, "lon_max": 100.0}
 
 
+def test_vendored_leaflet_matches_integrity_and_page_has_no_cdn():
+    """The page loads Leaflet from vendor/, and the files match the integrity hashes in index.html
+    (the browser refuses them otherwise, which would leave the map without its library)."""
+    import base64
+    import hashlib
+    import re
+    web = Path(__file__).resolve().parent.parent / "web"
+    html = (web / "index.html").read_text()
+    tags = re.findall(r"<(?:script|link)\b[^>]*integrity=[^>]*>", html, re.S)
+    assert len(tags) == 2
+    for tag in tags:
+        src = re.search(r'(?:src|href)="([^"]+)"', tag).group(1)
+        assert src.startswith("vendor/leaflet-1.9.4/"), src
+        want = re.search(r'integrity="([^"]+)"', tag).group(1)
+        got = "sha512-" + base64.b64encode(hashlib.sha512((web / src).read_bytes()).digest()).decode()
+        assert got == want, src
+    assert "cdnjs" not in re.sub(r"<!--.*?-->", "", html, flags=re.S)
+    assert (web / "vendor/leaflet-1.9.4/LICENSE").exists()
+
+
 def _first_bin(m, f):
     P = m["products"]
     if f["file"].startswith("frames/hres3h"):
