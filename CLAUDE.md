@@ -334,6 +334,9 @@ Changes after the user's review (13 Nov):
   same error reached our handler as the opaque "Script error.". Confirm with a Private window / extensions off.
   (c) 404 leaflet.js.map: the console requests the source map named at the end of leaflet.js. Fixed by vendoring
   `leaflet.js.map` (cdnjs 1.9.4, 225 kB); test added.
+- **Resolved (user, 13 Nov):** after the diagnostic warning (`b9a11e1`) and the Private-window / extensions-off check,
+  the user reports the Safari console errors are gone. Which step cleared them was not stated; most likely a Safari
+  extension. M5 closed with no known console errors from the app.
 - **Cache busting**: `build.copy_web` rewrites index.html links to `app.js?v=<sha256[:10]>` (also style.css, vendored
   Leaflet), so changed files always get new URLs; tested in `test_built_index_links_are_cache_busted`.
 Checks done: status ready, no console errors, slider labels equal the manifest (4 views), no horizontal scroll at 360/390/
