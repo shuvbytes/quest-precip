@@ -390,10 +390,10 @@ def card():
             b.js("document.getElementById('guide').click()")
             b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
             b.wait("!document.getElementById('pcard').hidden", 20)
-            res.append(("guide toggle hides the character (also after reload)", b.js("!document.querySelector('#pcard svg') && !document.getElementById('guide').checked")))
+            res.append(("guide toggle hides the character (also after reload)", b.js("!document.querySelector('#pcard .pc-guide') && !document.getElementById('guide').checked && !!document.querySelector('#pcard .skies svg')")))
             b.js("document.getElementById('guide').click()")
             b.js("new Promise(r => setTimeout(r, 100))")
-            res.append(("toggle on again shows it", b.js("!!document.querySelector('#pcard svg')")))
+            res.append(("toggle on again shows it", b.js("!!document.querySelector('#pcard .pc-guide svg')")))
         with Browser(390, 844, mobile=True) as b:
             b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
             b.wait("!document.getElementById('pcard').hidden", 20)
