@@ -294,8 +294,8 @@ body {
   /* point card on a short map: compact (smaller skies grid beside its caption, smaller guide), never taller than the map */
   .pcard { width: 300px; padding: 6px 8px 8px; max-height: calc(100% - 50px); overflow-y: auto; }
   .pc-main { margin: 2px 0 4px; font-size: 0.86rem; }
-  .skies { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
-  .skies svg { width: 66px; height: 66px; flex: none; }
+  .skies { margin-top: 4px; }
+  .skies svg { width: 56px; height: 56px; }
   .pc-guide { width: 52px; }
   .pc-guide svg { width: 48px; height: 48px; }
   .pc-more { margin-top: 5px; min-height: 30px; padding: 3px; }
@@ -345,7 +345,8 @@ body {
 .time-row button.play[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* "100 skies" (feature 2) */
-.skies { margin: 6px 0 0; }
-.skies svg { display: block; width: 124px; height: 124px; }
+/* compact (user, 14 Nov: the 124 px grid took too much room): ~60 px grid in one row with its caption */
+.skies { margin: 6px 0 0; display: flex; gap: 8px; align-items: center; }
+.skies svg { display: block; width: 60px; height: 60px; flex: none; }
 .skies figcaption { margin-top: 2px; font-size: 0.72rem; color: var(--ink-2); line-height: 1.25; }
-.pcard.sheet .skies svg { width: 112px; height: 112px; }
+.pcard.sheet .skies svg { width: 60px; height: 60px; }
