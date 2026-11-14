@@ -66,7 +66,7 @@ No tile server or third-party basemap is used, so no other borders are drawn and
   `make_geo.CAPITALS`: each must exist in Natural Earth and lie in its state's polygon; Chandigarh, capital of Punjab and
   Haryana, lies in Chandigarh UT), places with population ≥ 300,000 and places with Natural Earth scale rank ≤ 6.
   Label density uses Natural Earth's `MIN_ZOOM`.
-- Corrections to Natural Earth (listed, not silent): display names "Shimla" (NE "Simla") and "Dehradun" (NE "Dehra Dun"),
+- Corrections to Natural Earth (listed, not silent): display names "Shimla" (NE "Simla"), "Dehradun" (NE "Dehra Dun") and "Visakhapatnam" (NE "Vishakhapatnam"),
   old names kept as search aliases; Yangon not marked as Myanmar's capital (Naypyidaw is). Natural Earth's own state
   field is not used (it puts Gandhinagar in "Dadra and Nagar Haveli"): for every place inside India's official boundary
   the state comes from DataMeet `States/Admin2` (point in polygon), so place names never contradict the boundary drawn.

@@ -110,7 +110,7 @@ CAPITALS = {
 # Natural Earth still marks Yangon as Myanmar's capital; it has been Naypyidaw (also in NE) since 2006
 NOT_CAPITAL = {"Yangon"}
 # Display names: current official spellings where Natural Earth uses older ones (old name kept as a search alias)
-RENAME = {"Simla": "Shimla", "Dehra Dun": "Dehradun"}
+RENAME = {"Simla": "Shimla", "Dehra Dun": "Dehradun", "Vishakhapatnam": "Visakhapatnam"}
 ALIASES = {"Mumbai": ["Bombay"], "Chennai": ["Madras"], "Kolkata": ["Calcutta"], "Bengaluru": ["Bangalore"],
            "Thiruvananthapuram": ["Trivandrum"], "Puducherry": ["Pondicherry"], "Kochi": ["Cochin"],
            "Varanasi": ["Benares", "Banaras"], "Prayagraj": ["Allahabad"], "Allahabad": ["Prayagraj"],
