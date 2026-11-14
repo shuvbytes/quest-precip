@@ -1,5 +1,10 @@
 # CLAUDE.md — project memory
 
+**App name (user, 14 Nov): "Baरिश" (Barish), subtitle "a second opinion on rain".** Page title "Baरिश (Barish) — a second
+opinion on rain"; screen readers get "Barish" (Devanagari part aria-hidden + sr-only Latin). Repo and URLs unchanged
+(shuvbytes/quest-precip, quest-precip-api). Devanagari via system fonts only (Kohinoor/Devanagari Sangam MN on Apple,
+Noto Sans Devanagari on Android, Nirmala UI/Mangal on Windows).
+
 ## Goal
 QUEST Lab Full Stack AI pre-doc task (Shuvayan Dasgupta). Within 72 h of 12 Nov 2026 (target: done
 night of 14 Nov IST), build and deploy a web app that fetches ECMWF Open Data precipitation forecasts,
@@ -627,6 +632,17 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Check `m8_checks.py card`: poses picked in Python for windows 0/48/96 h, 11/11 match; card texts = panel texts; badge iff
   panel sentence; card on screen, not covering the point; Esc order, ×, Full details, toggle persists, phone sheet: PASS.
   Sparkline skipped (time).
+
+## Rename + interactive features plan (user decisions, 14 Nov)
+- Order: 0 rename → 1 play → 2 "100 skies" (each checked locally, then deployed) → STOP features, write README (outline
+  first) → 3 swipe compare → 5 story mode → 4 plan my day. A feature that is not solid is reverted to the last good commit.
+- 1 Play: never autoplay; prefers-reduced-motion → 2 s steps instead of 1 s; any interaction pauses.
+- 5 Story rules (approved with tweaks): heaviest 24 h; largest disagreement cluster at thresholds ≥ 10 mm (lower only if
+  none); dry-vs-wet contrast where the wet point is in a group of ≥ 3 cells with ≥ 20 mm and a < 1 mm cell within 2 grid
+  points; major city (≥ 1 M, in India) with the highest ENS P(≥ 10 mm); most confident heavy rain if P(≥ 50 mm) ≥ 30 %;
+  spots ≥ 300 km apart; captions never call either model wrong.
+- Rename done (`m8_checks.py brand`): heading read as "Barish" (accessibility tree), "रिश" drawn as real glyphs, not boxes,
+  in headless Chrome on desktop/portrait/landscape; subtitle hidden only in the one-line short-screen header.
 
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes

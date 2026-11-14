@@ -1,4 +1,4 @@
-/* India Rain Outlook. Colours for data come from manifest.json; these are page chrome only. */
+/* Baरिश (Barish), a second opinion on rain. Colours for data come from manifest.json; these are page chrome only. */
 :root {
   --ink: #1d1f23;
   --ink-2: #4a4f57;
@@ -10,7 +10,10 @@
   --amber-bg: #fff4d6;
   --amber-ink: #6b4a00;
   --radius: 8px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  /* Devanagari fallbacks (system fonts, nothing downloaded) so "रिश" in the name never shows as boxes:
+     Kohinoor / Devanagari Sangam MN on macOS and iOS, Noto Sans Devanagari on Android/Linux, Nirmala UI / Mangal on Windows */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Kohinoor Devanagari", "Devanagari Sangam MN",
+    "Noto Sans Devanagari", "Nirmala UI", "Mangal", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -25,7 +28,10 @@ body {
 }
 
 .top { padding: 10px 16px 8px; border-bottom: 1px solid var(--line); }
-.top h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
+.top h1 { margin: 0; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 6px; line-height: 1.2; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand .logo { flex: none; align-self: center; }
+.tagline { margin: 0; font-size: 0.86rem; font-style: italic; color: var(--ink-2); }
 .run { margin: 2px 0 0; font-size: 0.85rem; color: var(--ink-2); }
 
 .layout { flex: 1; display: flex; min-height: 0; }
@@ -261,7 +267,10 @@ body {
   .map-wrap { flex: 1; height: auto; min-height: 0; }
   .panel { border-left: 1px solid var(--line); border-top: 0; overflow-y: auto; }
   .top { padding: 4px 12px; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
-  .top h1 { font-size: 0.92rem; flex: none; }
+  .top h1 { font-size: 0.95rem; flex: none; }
+  .top .brand { flex: none; }
+  .top .tagline { display: none; }   /* one-line header: the name stays, the subtitle is in the page title */
+  .brand .logo { width: 16px; height: 16px; }
   .run { margin: 0; font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; }
   #run-line { flex: 0 1 auto; }
   #updated-line { flex: none; }

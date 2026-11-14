@@ -1,4 +1,4 @@
-"""India Rain Outlook: point forecast API (FastAPI).
+"""Baरिश (Barish), a second opinion on rain: point forecast API (FastAPI).
 
 Data: the API loads manifest.json + points.bin from the live site (GitHub Pages), the same files the browser uses, and
 checks every few minutes whether a newer build is published (ETag / generated_utc). So it is always in sync with the
@@ -119,7 +119,7 @@ async def lifespan(app):
 
 
 app = FastAPI(
-    title="India Rain Outlook: point forecast API",
+    title="Baरिश (Barish) point forecast API",
     version="1.0",
     lifespan=lifespan,
     description=(

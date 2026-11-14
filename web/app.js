@@ -1,4 +1,4 @@
-/* India Rain Outlook: map page. Everything shown (times, labels, bins, colours, text) comes from
+/* Baरिश (Barish), a second opinion on rain: map page. Everything shown (times, labels, bins, colours, text) comes from
    data/manifest.json, written by pipeline/build.py. Nothing about the forecast is hard-coded here. */
 "use strict";
 

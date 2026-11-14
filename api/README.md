@@ -1,4 +1,6 @@
-# India Rain Outlook: point forecast API
+# Baरिश (Barish) point forecast API
+
+*A second opinion on rain.*
 
 `GET /point?lat=13.08&lon=80.27` returns the forecast at the nearest 0.25° grid point (5–38°N, 65–100°E):
 ECMWF IFS HRES rain for every 3-hour step and 24-hour window (mm), and the ensemble's chance (%) of at least

@@ -413,5 +413,44 @@ def card():
     return ok
 
 
+GLYPH_JS = r"""
+(() => {
+  // Draw the name's Devanagari part in the page font, and an unassigned code point (U+0378, always the missing-glyph
+  // box); if the two pictures are the same, the text would show as boxes.
+  const font = getComputedStyle(document.querySelector('.brand-name')).fontFamily;
+  const pic = (t) => { const c = document.createElement('canvas'); c.width = 120; c.height = 40; const x = c.getContext('2d');
+    x.font = `28px ${font}`; x.fillText(t, 4, 30); return Array.from(x.getImageData(0, 0, 120, 40).data).join(','); };
+  const box = pic('͸͸͸'), name = pic('रिश'), ri = pic('रि');
+  return { font, differsFromBoxes: name !== box && ri !== pic('͸͸'),
+           width: Math.round(document.querySelector('.brand-name').getBoundingClientRect().width) };
+})()
+"""
+
+
+def brand():
+    httpd, port = s.serve()
+    ok = True
+    try:
+        for name, w, h, mobile in (("desktop", 1440, 900, False), ("portrait", 390, 844, True), ("landscape", 844, 390, True)):
+            with Browser(w, h, mobile=mobile) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")
+                g = b.js(GLYPH_JS)
+                b.call("Accessibility.enable")             # the heading's name as assistive technology gets it
+                nodes = b.call("Accessibility.getFullAXTree")["nodes"]
+                heads = [n for n in nodes if n.get("role", {}).get("value") == "heading"]
+                acc = heads[0].get("name", {}).get("value") if heads else None
+                title = b.js("document.title")
+                tag = b.js("(() => { const t = document.querySelector('.tagline'); return t && t.offsetParent ? t.textContent : '(hidden)'; })()")
+                good = g["differsFromBoxes"] and acc == "Barish" and title == "Baरिश (Barish) — a second opinion on rain"
+                print(f"{'PASS' if good else 'FAIL'}  {name} {w}x{h}: heading read as {acc!r}; Devanagari drawn as real glyphs: "
+                      f"{g['differsFromBoxes']}; name width {g['width']} px; subtitle: {tag!r}")
+                b.screenshot(s.OUT / f"rename_{name}.png")
+                ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand}[sys.argv[1]]() else 1)

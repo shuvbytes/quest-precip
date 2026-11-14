@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>India Rain Outlook</title>
-  <meta name="description" content="ECMWF forecasts of rain over India and nearby seas: one detailed model run (HRES) next to the ensemble's chances (ENS), with exact IST time windows.">
+  <title>Baरिश (Barish) — a second opinion on rain</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2.5c-3.6 5-6.5 8.6-6.5 12a6.5 6.5 0 0 0 13 0c0-3.4-2.9-7-6.5-12z' fill='%231f5fa8'/%3E%3C/svg%3E">
+  <meta name="description" content="Baरिश (Barish), a second opinion on rain. ECMWF forecasts of rain over India and nearby seas: one detailed model run (HRES) next to the ensemble's chances (ENS), with exact IST time windows.">
   <!-- Leaflet 1.9.4, served from this site (vendor/), not a CDN: a blocked or unreachable CDN left the page without
        its map library ("Can't find variable: L" in Safari). Same files as cdnjs 1.9.4; the integrity hash still
        makes the browser refuse a modified file, and tests/test_build.py checks the hashes. -->
@@ -14,7 +15,11 @@
 </head>
 <body data-status="loading">
   <header class="top">
-    <h1>India Rain Outlook</h1>
+    <div class="brand">
+      <!-- Name mixes Latin "Ba" and Devanagari "रिश"; screen readers get the plain "Barish" instead (aria-hidden + sr-only). -->
+      <h1><svg class="logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M12 2.5c-3.6 5-6.5 8.6-6.5 12a6.5 6.5 0 0 0 13 0c0-3.4-2.9-7-6.5-12z" fill="#1f5fa8"/><path d="M8.6 15.2a3.6 3.6 0 0 0 3 3.4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span class="brand-name" aria-hidden="true">Baरिश</span><span class="sr-only">Barish</span></h1>
+      <p class="tagline">a second opinion on rain</p>
+    </div>
     <p class="run" id="run-line">Loading forecast…</p>
     <p class="run" id="updated-line"></p>
   </header>

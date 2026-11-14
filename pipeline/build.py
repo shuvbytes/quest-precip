@@ -183,6 +183,7 @@ def write_manifest(base, grid, frames, tp_units, ens_units, out: Path, points=No
 
     m = {
         "schema": 1,
+        "app": {"name": "Baरिश", "name_latin": "Barish", "subtitle": "a second opinion on rain"},
         "run": {"utc": _iso(base), "ist": ist_label(base), "model": "ECMWF IFS (HRES + ENS), Open Data 0.25°"},
         "generated_utc": _iso(generated_utc),
         # point API (M7b): the page asks it first and falls back to points.bin; env API_URL overrides (local checks)

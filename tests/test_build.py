@@ -209,3 +209,13 @@ def _first_bin(m, f):
     if f["file"].startswith("frames/hres24h"):
         return P["hres_24h"]["bins"][0]
     return P["ens_prob"]["bins"][0]
+
+
+def test_app_name_in_manifest_and_page(built):
+    """Rename (14 Nov): Baरिश (Barish), a second opinion on rain; screen readers get the Latin spelling."""
+    out, m = built
+    assert m["app"] == {"name": "Baरिश", "name_latin": "Barish", "subtitle": "a second opinion on rain"}
+    html = (out.parent / "index.html").read_text()
+    assert "<title>Baरिश (Barish) — a second opinion on rain</title>" in html
+    assert '<span class="brand-name" aria-hidden="true">Baरिश</span><span class="sr-only">Barish</span>' in html
+    assert "Rain Outlook" not in html
