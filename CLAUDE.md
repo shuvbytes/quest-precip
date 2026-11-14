@@ -589,6 +589,27 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Dev tooling: `pipeline/cdp.py` (real-clock DevTools driver; `websocket-client` added to environment-dev.yml only);
   `m5_screens.py` aim/edges/targets removed (old screen-offset model).
 
+## M8 A + B — user confirmation and fixes (14 Nov)
+- **Safari (user, 14 Nov, localhost, run 14 Nov 00z): city search works; keyboard jumps fixed; mouse/keyboard crosshair fixed.**
+- Bug found by the user: after keyboard use, a click elsewhere left the keyboard cursor at the old point, so the next arrow
+  "jumped" far (the walk test only used a fresh page + keyboard). Fix `853495a`: one `app.cursor` shared by click/tap,
+  `p=` link, search and Enter. `m8_checks.py keys` now uses REAL DevTools key/mouse events: full walk 4 × 18,753 points,
+  every press exactly one grid point; keyboard → real click → ArrowRight = exactly one point east (desktop + phone, z5/z7);
+  same after p= link and search "madras". Safari note: Tab skips the map unless Option+Tab (or Safari setting).
+
+## M8 D — short screens / landscape phones (14 Nov) — `web/style.css`, `pipeline/m8_checks.py layout`
+- Short screens = `(max-height: 560px) and (min-aspect-ratio: 4/3)` (any width; 667×375 too). One-line header with short
+  texts (run, issued, updated), map fills the rest, side panel min(300 px, 45vw) scrolls on its own: search, mode, **time**,
+  colour/threshold/marks, then point panel, legend. Overlays smaller; edge labels hidden (veil + dashed edge stay); zoom note
+  moved into the panel. Tapping a point scrolls the panel to it. Region refitted on map-box resize until the user moves it.
+- Small screens (`max-width: 700px` or short): footer = one attribution line + "About & sources" bottom sheet (full credits,
+  Close button); large screens unchanged.
+- Results (real-clock Chrome, `python pipeline/m8_checks.py layout`): 844×390 header 26 / map 544×342 (was 197 tall) / footer
+  22 px, no page scroll; 667×375 map 367×327; 932×430 map 632×382; portrait 390×844 map 390×523 as before; desktop unchanged.
+  Checks: no page scroll, region fits, mode/search/time ≥ 30 px tall and in view, threshold reachable by panel scroll only,
+  no overlay overlaps, credits sheet opens/closes. Bugs the check caught: mode buttons squeezed to 2 px (flex column),
+  sheet text not wrapping, 667×375 getting the portrait layout. Not yet confirmed on a real phone.
+
 ## README notes (for M8 C)
 - **Disagreement example (confirmed live 14 Nov 06:35 UTC, run 2026-11-13 12z):** 14.50°N 84.75°E, X = 100 mm, window
   Wed 18 Nov 05:30 → Thu 19 Nov 05:30 IST: HRES **441.4 mm** vs ENS **4 %** chance of ≥ 100 mm → flagged *wetter*, 12-cell
@@ -600,7 +621,7 @@ visible; header scrolled away; region does not fit). Build after A and B:
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
 0. Confirm the 14 Nov 00z scheduled deploy (watcher running; see M7 section).
 1. ~~M8 A + B~~ done 14 Nov (live with the next scheduled deploy; then live checks + user Safari/phone check).
-   Next: **M8 D** (short screens / landscape phones).
+   ~~M8 D~~ built 14 Nov (local; user check, then deploy). Next: M8 C (point card, README).
 2. ~~M7b~~ done 13 Nov night (Render).
 3. **M8 C**: point card, then README (vector hatch if time).
 4. IMD-day view only if all of the above is done; 15 Nov buffer only.
