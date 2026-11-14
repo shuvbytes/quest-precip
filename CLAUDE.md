@@ -690,6 +690,12 @@ visible; header scrolled away; region does not fit). Build after A and B:
   14 Nov 00z not fired by 14:42 UTC); manual deploys cover it.
 - **User (14 Nov): features 4 (plan my day) and 5 (story mode) deferred to later; next = README (outline first).**
 
+## Scheduled runs on 14 Nov (00z slots 08:23–13:23 UTC)
+- Only ONE of the six hourly slots fired: run 43608754960 at 15:10 UTC (≥ 1 h 47 min after the last slot); build success,
+  "Live site already shows run 2026-11-14T00:00Z; nothing to deploy", deploy skipped, correct since 00z had been deployed
+  by hand at 13:01 UTC. Overnight 13→14 Nov: 2 of 2 slots fired ~4 h late. So GitHub cron here is late and lossy; the
+  hourly slots plus the skip check still made it work, and nothing is ever deployed twice.
+
 ## README written (14 Nov, `5414812`)
 - ~2 screens (77 lines), user: reduce repetition, include a phone screenshot, and a brief "built with Claude Code in one
   session" note with the start time (first commit Thu 12 Nov 2026 16:22 IST). Images: `docs/readme/bay_disagreement.png`
