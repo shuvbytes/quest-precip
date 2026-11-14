@@ -298,15 +298,24 @@ def _ist(t):
     return t + _IST
 
 
+# A plan day is the 24 h from 23:30 IST the evening before to 23:30 IST (user, 14 Nov): the 3 h steps start at :30 IST
+# (00/03.. UTC = 05:30/08:30.. IST; 12z runs too), so this is exactly 8 windows, the closest the grid allows to midnight-midnight.
+_SHIFT = _dt.timedelta(minutes=30)
+
+
+def _bounds(day):
+    d0 = _dt.datetime.fromisoformat(day) - _IST - _SHIFT          # 23:30 IST the evening before, in UTC
+    return d0, d0 + _dt.timedelta(days=1)
+
+
 def plan_days(m):
-    """IST calendar days (YYYY-MM-DD) touched by the HRES 3 h windows, in order."""
-    days = []
+    """IST days with at least one 3 h window inside their 23:30 -> 23:30 span, in order."""
+    out = []
     for f in m["products"]["hres_3h"]["frames"]:
-        a, b = _ist(_utc(f["start_utc"])), _ist(_utc(f["end_utc"]) - _dt.timedelta(minutes=1))
-        for d in (a.date(), b.date()):
-            if d.isoformat() not in days:
-                days.append(d.isoformat())
-    return days
+        d = (_ist(_utc(f["start_utc"])) + _SHIFT).date().isoformat()
+        if d not in out:
+            out.append(d)
+    return out
 
 
 def day_label(day):
@@ -317,17 +326,15 @@ def day_label(day):
 def plan_day(m, arrays, row, col, day, x_key):
     """The 'Plan my day' block for one grid point, IST day (YYYY-MM-DD) and ENS threshold, as the page shows it."""
     P = m["products"]
-    d0 = _dt.datetime.fromisoformat(day) - _IST               # 00:00 IST of that day, in UTC
-    d1 = d0 + _dt.timedelta(days=1)
+    d0, d1 = _bounds(day)
+    on_day = (_dt.datetime.fromisoformat(day)).date()
     dname = lambda t: _DAYS[_ist(t).weekday()]
-    def hm(t):                                                    # "08:30", "02:30 (Sun)"; the day's end is "24:00"
-        if t == d1:
-            return "24:00"
-        return _ist(t).strftime("%H:%M") + ("" if _ist(t).date() == _ist(d0).date() else f" ({dname(t)})")
+    def hm(t):                                                    # "08:30", "23:30 (Sat)"
+        return _ist(t).strftime("%H:%M") + ("" if _ist(t).date() == on_day else f" ({dname(t)})")
     entries = []
     for k, f in enumerate(P["hres_3h"]["frames"]):
         a, b = _utc(f["start_utc"]), _utc(f["end_utc"])
-        if a < d1 and b > d0:
+        if a >= d0 and b <= d1:
             v = float(arrays["hres_3h"][k, row, col])
             entries.append({"a": a, "b": b, "label": f"{hm(a)}–{hm(b)}", "text": fmt_mm(v, f["lowest_drawn"]),
                             "dry": v < f["lowest_drawn"]})
@@ -357,8 +364,8 @@ def plan_day(m, arrays, row, col, day, x_key):
     chance = f"Chance of ≥ {x_key} mm in the window {f['label_ist']}: {pct}."
     note = (f"The ensemble's 24-hour window covers {js_num(round(hours, 1))} of this day's 24 hours; "
             f"its windows do not follow calendar days.")
-    covered = sum((min(e["b"], d1) - max(e["a"], d0)).total_seconds() / 3600 for e in entries)
+    covered = sum((e["b"] - e["a"]).total_seconds() / 3600 for e in entries)
     cover = "" if covered >= 24 else (f"The forecast covers only {js_num(round(covered, 1))} hours of this day "
-                                      f"({hm(max(entries[0]['a'], d0))}–{hm(min(entries[-1]['b'], d1))} IST).")
-    return {"day": day_label(day), "entries": [{k_: e[k_] for k_ in ("label", "text", "dry")} for e in entries],
+                                      f"({hm(entries[0]['a'])}–{hm(entries[-1]['b'])} IST).")
+    return {"day": day_label(day), "span": f"23:30 {dname(d0)} → 23:30 {dname(d1 - _dt.timedelta(minutes=1))} IST", "entries": [{k_: e[k_] for k_ in ("label", "text", "dry")} for e in entries],
             "stretch": stretch, "chance": chance, "note": note, "cover": cover}

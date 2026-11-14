@@ -804,7 +804,7 @@ def plan():
     def read(b):
         return b.js("""(() => { const f = (n) => (document.querySelector(`[data-field="${n}"]`) || {}).textContent || null;
           const n = document.querySelectorAll('#plan-out .plan-list li').length;
-          return {point: document.body.dataset.point, sentence: f('plan-sentence'), note: f('plan-note'), cover: f('plan-cover'),
+          return {point: document.body.dataset.point, head: f('plan-head'), sentence: f('plan-sentence'), note: f('plan-note'), cover: f('plan-cover'),
                   w: [...Array(n).keys()].map(i => f('plan-w' + i)), v: [...Array(n).keys()].map(i => f('plan-v' + i)),
                   dry: [...document.querySelectorAll('#plan-out .plan-list li')].map(li => li.classList.contains('dry'))}; })()""")
     def compare(b, place, day, x):
@@ -812,10 +812,11 @@ def plan():
         lat, lon = map(float, r["point"].split(","))
         row, col = round((g["lat_north"] - lat) / g["dlat"]), round((lon - g["lon_west"]) / g["dlon"])
         want = pc.plan_day(m, arrays, row, col, day, x)
-        good = (r["sentence"] == f"{want['stretch']} {want['chance']}" and r["note"] == want["note"] and (r["cover"] or "") == want["cover"]
+        good = (r["head"].endswith(f"· {want['day']} ({want['span']})") and len(r["w"]) <= 8
+                and r["sentence"] == f"{want['stretch']} {want['chance']}" and r["note"] == want["note"] and (r["cover"] or "") == want["cover"]
                 and r["w"] == [e["label"] for e in want["entries"]] and r["v"] == [e["text"] for e in want["entries"]]
                 and r["dry"] == [e["dry"] for e in want["entries"]])
-        res.append((f"{place}, {pc.day_label(day)}, X={x}: {len(r['w'])} windows; '{r['sentence']}'" + (f" [{r['cover']}]" if r["cover"] else ""), good))
+        res.append((f"{place}, {r['head'].split(' · ')[-1]}, X={x}: {len(r['w'])} windows; '{r['sentence']}'" + (f" [{r['cover']}]" if r["cover"] else ""), good))
     try:
         with Browser(1440, 900) as b:
             b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")

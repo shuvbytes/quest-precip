@@ -19,7 +19,7 @@ def test_highlights_follow_the_rules(built):
     keys = [f"{t:g}" for t in P["ens_prob"]["thresholds_mm"]]
     w24, ens = a["hres_24h"], a["ens_prob"]
     rules = [h["rule"] for h in hs]
-    assert rules[:4] == ["heaviest", "disagreement", "contrast", "city"] and 4 <= len(hs) <= 5
+    assert rules[:4] == ["heaviest", "city", "disagreement", "contrast"] and 4 <= len(hs) <= 5   # city second (user, 14 Nov)
     for i, h in enumerate(hs):                     # >= 300 km apart
         for j in hs[:i]:
             assert _km(h["lat"], h["lon"], j["lat"], j["lon"]) >= 300, (h["rule"], j["rule"])

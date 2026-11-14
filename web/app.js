@@ -1224,11 +1224,11 @@ function renderStory(app) {
    for the 24 h window overlapping the day most, with how much of the day it covers (ENS windows ignore calendar days). */
 const IST_MS = 330 * 60 * 1000;
 const istDate = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
+// A plan day = 23:30 IST the evening before -> 23:30 IST (user, 14 Nov): exactly the 8 three-hour windows of that span.
+const SHIFT_MS = 30 * 60 * 1000;
 function planDays(m) {
   const out = [];
-  for (const f of m.products.hres_3h.frames) {
-    for (const d of [istDate(parseUTC(f.start_utc)), istDate(parseUTC(f.end_utc) - 60000)]) if (!out.includes(d)) out.push(d);
-  }
+  for (const f of m.products.hres_3h.frames) { const d = istDate(parseUTC(f.start_utc) + SHIFT_MS); if (!out.includes(d)) out.push(d); }
   return out;
 }
 function dayLabel(day) {
@@ -1236,16 +1236,16 @@ function dayLabel(day) {
   return `${DAYS[d.getUTCDay()]} ${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]}`;
 }
 function planDay(app, day) {
-  const { m, src } = app, P = m.products, d0 = Date.parse(`${day}T00:00:00Z`) - IST_MS, d1 = d0 + 864e5;
+  const { m, src } = app, P = m.products, d0 = Date.parse(`${day}T00:00:00Z`) - IST_MS - SHIFT_MS, d1 = d0 + 864e5;
+  const dname = (t) => DAYS[new Date(t + IST_MS).getUTCDay()];
   const hm = (t) => {
-    if (t === d1) return "24:00";
     const d = new Date(t + IST_MS), s = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
-    return istDate(t) === day ? s : `${s} (${DAYS[d.getUTCDay()]})`;
+    return istDate(t) === day ? s : `${s} (${dname(t)})`;
   };
   const entries = [];
   P.hres_3h.frames.forEach((f, k) => {
     const a = parseUTC(f.start_utc), b = parseUTC(f.end_utc);
-    if (a < d1 && b > d0) {
+    if (a >= d0 && b <= d1) {
       const v = src.val("hres_3h", [k]);
       entries.push({ a, b, label: `${hm(a)}–${hm(b)}`, text: fmtMm(v, f.lowest_drawn), dry: v < f.lowest_drawn });
     }
@@ -1266,12 +1266,12 @@ function planDay(app, day) {
   });
   const pct = fmtPct(src.val("ens_prob", [kx, top.k]), top.f.lowest_drawn);
   const r1 = (v) => fmt(Math.round(v * 10) / 10);
-  const covered = entries.reduce((s, e) => s + (Math.min(e.b, d1) - Math.max(e.a, d0)) / 36e5, 0);
+  const covered = entries.reduce((s, e) => s + (e.b - e.a) / 36e5, 0);
   return {
-    day: dayLabel(day), entries, best,
+    day: dayLabel(day), span: `23:30 ${dname(d0)} → 23:30 ${dname(d1 - 60000)} IST`, entries, best,
     stretch, chance: `Chance of ≥ ${fmt(x)} mm in the window ${top.f.label_ist}: ${pct}.`,
     note: `The ensemble's 24-hour window covers ${r1(top.h)} of this day's 24 hours; its windows do not follow calendar days.`,
-    cover: covered >= 24 ? "" : `The forecast covers only ${r1(covered)} hours of this day (${hm(Math.max(entries[0].a, d0))}–${hm(Math.min(entries[entries.length - 1].b, d1))} IST).`,
+    cover: covered >= 24 ? "" : `The forecast covers only ${r1(covered)} hours of this day (${hm(entries[0].a)}–${hm(entries[entries.length - 1].b)} IST).`,
   };
 }
 function renderPlan(app) {
@@ -1280,7 +1280,8 @@ function renderPlan(app) {
   if (!app.point || !app.src) { box.innerHTML = ""; box.appendChild(el("p", "sub", "Pick a place above, or tap the map.")); return; }
   const r = planDay(app, sel.value);
   box.innerHTML = "";
-  const head = el("p", "plan-head", `${nearText(app.places || [], app.point.lat, app.point.lon)} · ${r.day} (IST)`);
+  const head = el("p", "plan-head", `${nearText(app.places || [], app.point.lat, app.point.lon)} · ${r.day} (${r.span})`);
+  head.dataset.field = "plan-head";
   const s1 = el("p", "plan-sentence", `${r.stretch} ${r.chance}`);
   s1.dataset.field = "plan-sentence";
   const ul = el("ul", "plan-list");
@@ -1724,6 +1725,7 @@ async function main() {
   const daySel = $("plan-day");
   planDays(m).forEach((d) => { const o = document.createElement("option"); o.value = d; o.textContent = `${dayLabel(d)} (IST)`; daySel.appendChild(o); });
   if (daySel.options.length > 1) daySel.selectedIndex = 1;      // the first day is usually only partly covered
+  // a day = 23:30 the evening before -> 23:30 IST (8 three-hour windows); the picker says so
   wireSearch(app, { input: "plan-q", list: "plan-list", status: "plan-status", opt: "plan-opt" }, (p) => {
     $("plan-status").textContent = `${p.name} selected for planning.`;
     selectPoint(app, p.lat, p.lon, false);

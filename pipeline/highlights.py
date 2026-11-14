@@ -3,12 +3,13 @@ the numbers the panel shows), so the selection and the page's captions can never
 
 Rules (approved by the user, 14 Nov), each over all 24 h windows and grid points inside the forecast area:
  1 heaviest       largest HRES 24 h total
- 2 disagreement   largest map-marked disagreement group (8-connected, >= map_min_cluster cells) at thresholds >= 10 mm
+ 2 city           (moved up, user 14 Nov) see below
+ 3 disagreement   largest map-marked disagreement group (8-connected, >= map_min_cluster cells) at thresholds >= 10 mm
                   (lower thresholds only if there is none); spot = its point with the largest HRES total (wetter group)
                   or the largest ENS chance (drier group)
- 3 contrast       a wet point (HRES >= 20 mm) inside a group of >= 3 cells with >= 20 mm, with a < 1 mm cell within 2 grid
+ 4 contrast       a wet point (HRES >= 20 mm) inside a group of >= 3 cells with >= 20 mm, with a < 1 mm cell within 2 grid
                   points; the largest wet amount wins
- 4 city           among labelled places with population >= 1 million inside India, the one + window with the highest ENS
+   city           among labelled places with population >= 1 million inside India, the one + window with the highest ENS
                   chance of >= 10 mm (ties: larger HRES total)
  5 confident      the largest ENS chance of >= 50 mm, only if it is >= 30 %
 Every spot must be >= 300 km from the spots already chosen; otherwise the rule's next-best candidate is taken.
@@ -66,6 +67,23 @@ def select(manifest, arrays, places):
             yield float(w24[k, r, c]), k, r, c, None
     take("heaviest", cand_heaviest(), lambda k, r, c, e: {"fill": "rain", "x": CONFIDENT_X, "hatch": True})
 
+    # 2 major city (user, 14 Nov: chosen right after the heaviest stop, so the best city is not pushed
+    # aside by later stops of the same storm; e.g. 14 Nov 00z: Visakhapatnam 52 % instead of Chennai 33 %) in India with the highest chance of >= 10 mm
+    kx10 = keys.index(CITY_X)
+    def cand_city():
+        out = []
+        for p in places:
+            if p["kind"] not in ("city", "capital", "state_capital") or p["population"] < CITY_POP or not p["area"].endswith("India"):
+                continue
+            r = int(round((g["lat_north"] - p["lat"]) / g["dlat"]))
+            c = int(round((p["lon"] - g["lon_west"]) / g["dlon"]))
+            if not (0 <= r < nlat and 0 <= c < nlon):
+                continue
+            for k in range(w24.shape[0]):
+                out.append(((float(ens[kx10, k, r, c]), float(w24[k, r, c])), k, r, c, p["name"]))
+        return sorted(out, key=lambda t: (-t[0][0], -t[0][1], t[1]))
+    take("city", cand_city(), lambda k, r, c, e: {"fill": "chance", "x": CITY_X, "hatch": True, "city": e})
+
     # 2 largest disagreement group at X >= 10 mm (fallback: lower X)
     def groups(xs):
         out = []
@@ -111,22 +129,6 @@ def select(manifest, arrays, places):
         return sorted(out, key=lambda t: (-t[0], t[1]))
     take("contrast", cand_contrast(), lambda k, r, c, e: {"fill": "rain", "x": CITY_X, "hatch": False,
                                                           "dry_lat": ll(*e)[0], "dry_lon": ll(*e)[1]})
-
-    # 4 major city in India with the highest chance of >= 10 mm
-    kx10 = keys.index(CITY_X)
-    def cand_city():
-        out = []
-        for p in places:
-            if p["kind"] not in ("city", "capital", "state_capital") or p["population"] < CITY_POP or not p["area"].endswith("India"):
-                continue
-            r = int(round((g["lat_north"] - p["lat"]) / g["dlat"]))
-            c = int(round((p["lon"] - g["lon_west"]) / g["dlon"]))
-            if not (0 <= r < nlat and 0 <= c < nlon):
-                continue
-            for k in range(w24.shape[0]):
-                out.append(((float(ens[kx10, k, r, c]), float(w24[k, r, c])), k, r, c, p["name"]))
-        return sorted(out, key=lambda t: (-t[0][0], -t[0][1], t[1]))
-    take("city", cand_city(), lambda k, r, c, e: {"fill": "chance", "x": CITY_X, "hatch": True, "city": e})
 
     # 5 most confident heavy rain
     kx50 = keys.index(CONFIDENT_X)

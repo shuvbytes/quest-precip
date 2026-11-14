@@ -264,8 +264,10 @@ def test_plan_day_twin(data):
     m, arrays, _ = data
     days = pc.plan_days(m)
     assert len(days) >= 6
-    full = pc.plan_day(m, arrays, 100, 61, days[1], "10")          # a whole IST day: 9 overlapping 3 h windows, no cover note
-    assert len(full["entries"]) == 9 and full["cover"] == ""
+    full = pc.plan_day(m, arrays, 100, 61, days[1], "10")          # a whole day, 23:30 -> 23:30 IST: exactly 8 windows of 3 h
+    assert len(full["entries"]) == 8 and full["cover"] == ""
+    assert full["entries"][0]["label"].startswith("23:30 (") and full["entries"][-1]["label"].endswith("–23:30")
+    assert full["span"].startswith("23:30 ") and full["span"].endswith(" IST")
     assert full["note"].startswith("The ensemble's 24-hour window covers ") and "calendar days" in full["note"]
     first = pc.plan_day(m, arrays, 100, 61, days[0], "10")         # the run starts mid-day: partial
     assert first["cover"].startswith("The forecast covers only ")

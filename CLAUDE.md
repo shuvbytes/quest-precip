@@ -730,6 +730,17 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Check: every string == Python twin for Chennai/Mumbai/Port Blair × first/second/last day, a threshold change, a map tap,
   phone portrait/landscape (16/16); `test_plan_day_twin` in CI.
 
+## Changes after the user's review of 4 + 5 (14 Nov)
+- Story city stop was "always Chennai": the city rule came 4th, and with one storm on the Andhra coast the better cities
+  (Visakhapatnam 52 %, Vijayawada, Amaravati) were within 300 km of earlier stops. **User: city stop second** (right after
+  heaviest). City now: 12 Nov 00z Srinagar, 12 Nov 12z Srinagar, 13 Nov 12z Chennai, 14 Nov 00z Visakhapatnam.
+- Plan my day: 3 h steps start at :30 IST, so no set of windows is midnight-to-midnight. **User: a day = 23:30 the evening
+  before → 23:30 IST, exactly 8 windows**, label "(23:30 Sat → 23:30 Sun IST)"; partial first/last days still noted (first day
+  of a 00z run: 6 windows, 18 h). ENS window = most overlap (ties: earlier). Both twins changed; plan check 16/16, tests 82.
+- On-time runs: **user chose an external free scheduler (cron-job.org)** calling GitHub's workflow_dispatch API at 08:20 and
+  20:20 UTC with `skip_if_unchanged=true`; fine-grained token (this repo, Actions read/write) created and stored by the user
+  in cron-job.org only. GitHub's hourly slots stay as backup. Render cannot do this on the free tier (sleeps, no cron jobs).
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
