@@ -98,6 +98,8 @@ def client(built, monkeypatch, tmp_path):
     d.mkdir()
     for f in ("manifest.json", "points.bin"):
         shutil.copy(out / f, d / f)
+    (tmp_path / "geo").mkdir()
+    shutil.copy(out.parent / "geo" / "places.json", tmp_path / "geo" / "places.json")
     monkeypatch.setattr(api, "DATA_DIR", str(d))
     monkeypatch.setattr(api, "store", api.Store())
     api.store.refresh()
@@ -233,3 +235,25 @@ def test_api_gzips_point_answers(client):
     """Render's free plan includes 5 GB outbound a month: /point answers go out gzipped (~3 kB instead of ~37 kB)."""
     r = client.get("/point", params={"lat": 15, "lon": 86.5}, headers={"Accept-Encoding": "gzip"})
     assert r.headers.get("content-encoding") == "gzip"
+
+
+
+# ---------- "Near <place>" (M8 A) ----------
+
+def test_near_wording_and_compass():
+    """<= 25 km: "Near X (N km)"; beyond: "N km <8-point direction> of X", direction from the place to the point."""
+    import pointcore as pc
+    X = [{"name": "X", "area": "Somewhere", "lat": 10.0, "lon": 80.0, "kind": "city"}]
+    assert pc.near(X, 10.1, 80.0)["text"] == "Near X (11 km)"
+    d = 2.0
+    for (dlat, dlon), side in {(d, 0): "N", (d, d): "NE", (0, d): "E", (-d, d): "SE", (-d, 0): "S", (-d, -d): "SW",
+                               (0, -d): "W", (d, -d): "NW"}.items():
+        r = pc.near(X, 10.0 + dlat, 80.0 + dlon)
+        assert r["direction"] == side and r["text"] == f"{pc.js_round(r['distance_km'])} km {side} of X", r
+
+
+def test_api_point_says_near_which_place(client):
+    j = client.get("/point", params={"lat": 13.0827, "lon": 80.2707}).json()
+    assert j["near"]["name"] == "Chennai" and j["near"]["text"].startswith("Near Chennai (")
+    j = client.get("/point", params={"lat": 15.0, "lon": 88.0}).json()          # mid-Bay
+    assert " km " in j["near"]["text"] and " of " in j["near"]["text"], j["near"]

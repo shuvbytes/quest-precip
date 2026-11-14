@@ -54,6 +54,38 @@ def distance_km(lat1, lon1, lat2, lon2):
     return 2 * 6371.0 * math.asin(math.sqrt(a))
 
 
+# ---------- "Near <place>" (M8 A): nearest listed place, same rule as the page (web/app.js nearText) ----------
+
+NEAR_KM = 25                         # up to this distance: "Near Chennai (9 km)"; beyond: "420 km E of Chennai"
+COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+PLACE_KINDS = ("city", "capital", "state_capital")
+
+
+def places_from_json(doc):
+    """geo/places.json -> list of dicts (cities only; country and sea labels are not places to be near)."""
+    rows = [dict(zip(doc["fields"], r)) for r in doc["places"]]
+    return [r for r in rows if r["kind"] in PLACE_KINDS]
+
+
+def bearing_deg(lat1, lon1, lat2, lon2):
+    """Initial great-circle bearing from point 1 to point 2, degrees clockwise from north."""
+    p1, p2, dl = math.radians(lat1), math.radians(lat2), math.radians(lon2 - lon1)
+    y = math.sin(dl) * math.cos(p2)
+    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+
+def near(places, lat, lon):
+    """Nearest place to (lat, lon) and the panel's sentence for it."""
+    best = min(places, key=lambda p: distance_km(lat, lon, p["lat"], p["lon"]))
+    d = distance_km(lat, lon, best["lat"], best["lon"])
+    b = bearing_deg(best["lat"], best["lon"], lat, lon)
+    km, side = js_round(d), COMPASS[js_round(b / 45) % 8]
+    text = f"Near {best['name']} ({km} km)" if d <= NEAR_KM else f"{km} km {side} of {best['name']}"
+    return {"name": best["name"], "area": best["area"], "distance_km": round(d, 1), "bearing_deg": round(b, 1),
+            "direction": side, "text": text}
+
+
 def window_index(frames, t):
     """Last frame starting at or before hour t (the page's frameIndex)."""
     return max((i for i, f in enumerate(frames) if f["start_h"] <= t), default=0)
@@ -143,7 +175,7 @@ def not_on_map_text(m):
 
 # ---------- the panel's fields, as {data-field: text} (used by m6_check to compare with the page) ----------
 
-def panel_fields(m, arrays, row, col, x_key, t):
+def panel_fields(m, arrays, row, col, x_key, t, places=None):
     """Every text the panel shows with a data-field, for 24 h mode at threshold x_key and start hour t."""
     P, g = m["products"], m["grid"]
     idx = row * g["nlon"] + col
@@ -167,6 +199,8 @@ def panel_fields(m, arrays, row, col, x_key, t):
     exp.update({"sum-24h": s["rain"], "near-24h": s["nearby"], "sum-ens": s["chance"]})
     if s["disagreement"]:
         exp["disagree"] = s["disagreement"]
+    if places:
+        exp["near"] = near(places, g["lat_north"] - row * g["dlat"], g["lon_west"] + col * g["dlon"])["text"]
     return exp
 
 
@@ -197,7 +231,7 @@ def _r1(v):
     return round(float(v), 1)
 
 
-def point_report(m, arrays, lat, lon, x_key, t):
+def point_report(m, arrays, lat, lon, x_key, t, places=None):
     """Everything the panel shows for (lat, lon), as numbers + the panel's exact texts. None if outside the area."""
     gp = grid_point(m, lat, lon)
     if gp is None:
@@ -237,6 +271,7 @@ def point_report(m, arrays, lat, lon, x_key, t):
         "requested": {"lat": lat, "lon": lon},
         "grid_point": {"lat": glat, "lon": glon, "row": row, "col": col,
                        "distance_km": round(distance_km(lat, lon, glat, glon), 2)},
+        "near": near(places, glat, glon) if places else None,
         "value_meaning": g["value_meaning"],
         "units": {"rain": "mm", "chance": "%"},
         "summary": summary(m, arrays, row, col, x_key, t),

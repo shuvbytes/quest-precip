@@ -43,6 +43,7 @@ class Store:
 
     def __init__(self):
         self.data = None            # (manifest, arrays)
+        self.places = None          # cities from geo/places.json, for "near"
         self.etag = None
         self.loaded_at = None
         self.last_check = 0.0
@@ -61,6 +62,16 @@ class Store:
             return None, self.etag
         r.raise_for_status()
         return r.json(), r.headers.get("etag")
+
+    def _places(self):
+        """geo/places.json from the same site (labels, search and "Near" share it); None if unavailable."""
+        import json
+        if DATA_DIR:
+            f = Path(DATA_DIR).parent / "geo" / "places.json"
+            return pc.places_from_json(json.loads(f.read_text())) if f.exists() else None
+        r = httpx.get(f"{SITE_URL}/geo/places.json", timeout=20)
+        r.raise_for_status()
+        return pc.places_from_json(r.json())
 
     def _points(self, m):
         if DATA_DIR:
@@ -81,7 +92,12 @@ class Store:
                 self.last_error = None
                 return
             arrays = pc.decode(m, self._points(m))          # checks the byte count against the manifest
+            try:
+                places = self._places()
+            except Exception:                               # noqa: BLE001 ("near" is optional; values are not)
+                places = self.places
             self.data, self.etag, self.loaded_at, self.last_error = (m, arrays), etag, _now(), None
+            self.places = places
         except Exception as e:                               # noqa: BLE001 (report, keep serving the old data)
             self.last_error = f"{type(e).__name__}: {e}"
         finally:
@@ -196,7 +212,7 @@ def point(
     starts = [f["start_h"] for f in m["products"]["hres_24h"]["frames"]]
     if t not in starts:
         return _error(422, "invalid_request", f"t must be one of {', '.join(map(str, starts))} (hours after the run)")
-    r = pc.point_report(m, arrays, lat, lon, xk, t)
+    r = pc.point_report(m, arrays, lat, lon, xk, t, store.places)
     if r is None:
         reg = m["region"]
         return _error(404, "outside_forecast_area",

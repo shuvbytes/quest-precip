@@ -39,7 +39,8 @@ PLACES = [("Chennai", 13.0827, 80.2707, None), ("Bay of Bengal", 15.00, 86.50, N
 
 def expected(m, pts, row, col, state):
     """The panel's texts from Python (api/pointcore.py, the same code the API uses)."""
-    exp = pc.panel_fields(m, pts, row, col, state["x"], state["t"])
+    places = pc.places_from_json(json.loads((s.SITE / "geo" / "places.json").read_text()))
+    exp = pc.panel_fields(m, pts, row, col, state["x"], state["t"], places)
     k = pc.window_index(m["products"]["hres_24h"]["frames"], state["t"])
     kx = pc.threshold_keys(m).index(state["x"])
     fl = pc.cell_flag(m, state["x"], k, row * m["grid"]["nlon"] + col)
@@ -84,7 +85,7 @@ def main(hres_path, default_view="mode=24h&fill=chance&x=100&t=60"):
             print(f"== {name}: clicked {lat}, {lon} -> grid point {glat:.2f}N {glon:.2f}E (page: {point})")
             print(f"   values from: {got.get('source', '(no source line)')}")
             print(f"   view #{view}; window {w['label_ist']}" + (f"; flag: {fl[0]}, on map: {fl[1]}" if fl else ""))
-            for f in ("sum-24h", "near-24h", "sum-ens", "disagree"):
+            for f in ("near", "sum-24h", "near-24h", "sum-ens", "disagree"):
                 if f in exp or f in got:
                     print(f"   {f:9s} python: {exp.get(f, '(none)')!r}\n   {'':9s} page:   {got.get(f, '(none)')!r}"
                           f"   {'MATCH' if exp.get(f) == got.get(f) else 'DIFF'}")

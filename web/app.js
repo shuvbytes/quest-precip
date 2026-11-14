@@ -451,6 +451,31 @@ function localSource(m, P, point, reason) {
   };
 }
 
+/* "Near <place>" (M8 A), same rule as api/pointcore.py near(): nearest listed city (great circle), bearing from it
+   to the grid point. Up to 25 km "Near Chennai (9 km)", beyond "420 km E of Chennai". */
+const NEAR_KM = 25, COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, p1 = lat1 * r, p2 = lat2 * r, dp = p2 - p1, dl = (lon2 - lon1) * r;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * 6371.0 * Math.asin(Math.sqrt(a));
+}
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, p1 = lat1 * r, p2 = lat2 * r, dl = (lon2 - lon1) * r;
+  const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+function nearText(places, lat, lon) {
+  let best = null, bd = Infinity;
+  for (const p of places) {
+    if (!(p.kind === "city" || p.kind === "capital" || p.kind === "state_capital")) continue;
+    const d = distanceKm(lat, lon, p.lat, p.lon);
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (!best) return "";
+  const km = Math.round(bd), side = COMPASS[Math.round(bearingDeg(best.lat, best.lon, lat, lon) / 45) % 8];
+  return bd <= NEAR_KM ? `Near ${best.name} (${km} km)` : `${km} km ${side} of ${best.name}`;
+}
+
 /* Nearest grid point to (lat, lon); null if outside the forecast area (the image covers the cell edges). */
 function gridPoint(m, lat, lon) {
   const g = m.grid;
@@ -516,6 +541,11 @@ function renderPoint(app) {
   $("point-title").textContent = `Grid point ${fmtLat(point.lat)}, ${fmtLon(point.lon)}`;
   const body = $("point-body");
   body.innerHTML = "";
+  if (app.places) {
+    const nr = el("p", "near-place", nearText(app.places, point.lat, point.lon));
+    nr.dataset.field = "near";
+    body.appendChild(nr);
+  }
   if (point.clicked) body.appendChild(el("p", "sub", `You selected ${fmtLat(point.clicked[0])}, ${fmtLon(point.clicked[1])}`));
   body.appendChild(el("p", "meaning", m.grid.value_meaning));
   const content = el("div", "point-content");

@@ -220,3 +220,4 @@ body {
 .search li b { color: #1d2025; font-weight: 600; }
 .search li[aria-selected="true"], .search li:hover { background: #e8f0fb; }
 .search li.none { color: #6b717b; cursor: default; }
+.point .near-place { margin: 0 0 4px; font-size: 0.86rem; font-weight: 600; color: var(--ink-2, #3a3f47); }
