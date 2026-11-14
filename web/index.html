@@ -24,6 +24,7 @@
       <div id="map"></div>
       <div class="crosshair" id="crosshair" aria-hidden="true" hidden></div>
       <div class="cross-readout" id="cross-readout" aria-hidden="true" hidden></div>
+      <section class="pcard" id="pcard" aria-label="Summary at the selected point" hidden></section>
       <p class="sr-only" id="cross-live" aria-live="polite"></p>
       <div class="map-labels">
         <div class="showing" id="showing" aria-live="polite"></div>
@@ -82,6 +83,11 @@
         <p class="t-label" id="t-label"></p>
         <p class="t-lead" id="t-lead"></p>
       </div>
+
+      <label class="check guide-toggle">
+        <input type="checkbox" id="guide" checked>
+        <span>Show the weather guide on the point card</span>
+      </label>
 
       <div id="legend" class="legend"></div>
     </aside>

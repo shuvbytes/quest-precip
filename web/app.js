@@ -537,11 +537,14 @@ function selectPoint(app, lat, lon, clicked) {
       `This point (${fmtLat(lat)}, ${fmtLon(lon)}) is outside the forecast area, ${r.lat_min}–${r.lat_max}°N, ` +
       `${r.lon_min}–${r.lon_max}°E (grey shading beyond the dashed edge). Tap inside the area for a forecast.`));
     document.body.dataset.point = "outside";
+    $("pcard").hidden = true;
     writeHash();
     return;
   }
   state.p = [gp.lat, gp.lon];
   app.point = { ...gp, clicked: clicked ? [lat, lon] : null };
+  app.cardClosed = false;
+  $("pcard").hidden = true;                  // shown again once this point's values are in (renderCard)
   // ONE current point for mouse and keyboard (user, 14 Nov): every selection (click/tap, p= link, search, Enter) moves
   // the keyboard cursor here, so the next arrow press starts from the selected grid point.
   if (app.cursor) {
@@ -556,6 +559,7 @@ function selectPoint(app, lat, lon, clicked) {
 }
 
 function closePoint(app) {
+  $("pcard").hidden = true;
   $("point").hidden = true;
   $("point-hint").hidden = false;
   if (app.marker) { app.map.removeLayer(app.marker); app.marker = null; }
@@ -908,6 +912,7 @@ function renderPointContent(app) {
   content.appendChild(so);
   document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
   document.body.dataset.source = src.kind;
+  renderCard(app);
 }
 
 /* ---------- place search (M8 A): a WAI-ARIA combobox over the same local place list (no external service) ----------
@@ -996,6 +1001,139 @@ function wireSearch(app) {
     }
   });
   input.addEventListener("blur", () => setTimeout(close, 150));
+}
+
+/* ---------- point card (M8 C): a compact summary next to the selected point ----------
+   Same data as the panel (app.src.val, cellFlag, fmtMm/fmtPct, nearText). Esc or x closes it (the panel stays);
+   "Full details" goes to the panel. Phones: a bottom sheet. The guide character's pose (24 h window under the slider):
+     disagree: the point is flagged wetter/drier at the current threshold X (same flag as the panel's sentence)
+     heavy:    ENS chance of >= 50 mm >= 50 %
+     light:    HRES 24 h total >= 1 mm, or ENS chance of >= 1 mm >= 50 %
+     dry:      otherwise                                         (first matching rule wins, in this order) */
+const POSE = {
+  dry: { caption: "Mostly dry", alt: "Weather guide holding a closed umbrella, relaxed: mostly dry here in this window." },
+  light: { caption: "Some rain", alt: "Weather guide under a small open umbrella with a few raindrops: some rain here in this window." },
+  heavy: { caption: "Heavy rain likely", alt: "Weather guide gripping a large umbrella in heavy rain, eyebrows raised: heavy rain likely here in this window." },
+  disagree: { caption: "The models disagree", alt: "Weather guide shrugging with a question mark: the detailed run and the ensemble disagree here." },
+};
+
+function poseFor(app, k) {
+  const { m, src, point } = app, Pr = m.products, idx = point.row * m.grid.nlon + point.col;
+  if (cellFlag(m, state.x, k, idx)) return "disagree";
+  const keys = Pr.ens_prob.thresholds_mm.map(thrKey);
+  const p50 = src.val("ens_prob", [keys.indexOf("50"), k]), p1 = src.val("ens_prob", [keys.indexOf("1"), k]);
+  if (p50 >= 50) return "heavy";
+  if (src.val("hres_24h", [k]) >= 1 || p1 >= 50) return "light";
+  return "dry";
+}
+
+/* Original character, drawn from simple shapes for this app: a round-headed figure in a raincoat collar. */
+function guideSVG(pose) {
+  const ink = "#2b2f36", face = "#fdf8ee", coat = "#e9b949", umb = "#1f5fa8", drop = "#4a90d9";
+  const drops = (n, x0, y0) => Array.from({ length: n }, (_, i) =>
+    `<path d="M${x0 + (i % 4) * 9 + (i > 3 ? 4 : 0)} ${y0 + Math.floor(i / 4) * 9} l-1.5 4 a1.6 1.6 0 0 0 3 0z" fill="${drop}"/>`).join("");
+  const body = `<path d="M22 70 q0 -17 14 -17 q14 0 14 17z" fill="${coat}" stroke="${ink}" stroke-width="1.5"/>
+    <circle cx="36" cy="42" r="11" fill="${face}" stroke="${ink}" stroke-width="1.5"/>`;
+  const eyes = (dy = 0) => `<circle cx="32" cy="${41 + dy}" r="1.3" fill="${ink}"/><circle cx="40" cy="${41 + dy}" r="1.3" fill="${ink}"/>`;
+  const parts = {
+    dry: `${body}${eyes()}<path d="M32 46 q4 3 8 0" stroke="${ink}" stroke-width="1.4" fill="none"/>
+      <path d="M53 50 v17" stroke="${ink}" stroke-width="1.6"/><path d="M53 50 q-1 -6 4 -6" stroke="${ink}" stroke-width="1.6" fill="none"/>
+      <path d="M51 66 l2 4 l2 -4z" fill="${umb}" stroke="${ink}" stroke-width="1"/>
+      <circle cx="60" cy="14" r="5" fill="#f2c94c"/>`,
+    light: `${drops(4, 14, 8)}<path d="M18 30 q18 -16 36 0z" fill="${umb}" stroke="${ink}" stroke-width="1.5"/>
+      <path d="M36 30 v8" stroke="${ink}" stroke-width="1.4"/>${body}${eyes()}
+      <path d="M33 46 h6" stroke="${ink}" stroke-width="1.4"/>`,
+    heavy: `${drops(8, 8, 4)}${drops(8, 42, 6)}<path d="M12 31 q24 -22 48 0z" fill="${umb}" stroke="${ink}" stroke-width="1.5"/>
+      <path d="M36 31 v8" stroke="${ink}" stroke-width="1.5"/>${body}${eyes(1)}
+      <path d="M29.5 37.5 l4 -1.5 M42.5 37.5 l-4 -1.5" stroke="${ink}" stroke-width="1.3"/>
+      <path d="M32 47 q2 -2 4 0 q2 2 4 0" stroke="${ink}" stroke-width="1.3" fill="none"/>`,
+    disagree: `${body}${eyes()}<path d="M32 47 q4 -1.5 8 1" stroke="${ink}" stroke-width="1.4" fill="none"/>
+      <path d="M24 58 l-9 -7 M48 58 l9 -7" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>
+      <path d="M13 50 l-3 -2 M59 50 l3 -2" stroke="${ink}" stroke-width="1.5" stroke-linecap="round"/>
+      <text x="36" y="25" text-anchor="middle" font-family="system-ui, sans-serif" font-size="17" font-weight="700" fill="${umb}">?</text>`,
+  };
+  return `<svg viewBox="0 0 72 72" width="64" height="64" role="img" aria-label="${POSE[pose].alt}">
+    <title>${POSE[pose].alt}</title>${parts[pose]}</svg>`;
+}
+
+function guideOn() { try { return localStorage.getItem("guide") !== "off"; } catch (e) { return true; } }
+
+function renderCard(app) {
+  const card = $("pcard"), { m, src, point } = app;
+  if (!src || !point || app.cardClosed) { card.hidden = true; return; }
+  const Pr = m.products, idx = point.row * m.grid.nlon + point.col;
+  const k24 = frameIndex(Pr.hres_24h.frames), f24 = Pr.hres_24h.frames[k24];
+  const keys = Pr.ens_prob.thresholds_mm.map(thrKey), kx = keys.indexOf(state.x);
+  const ef = Pr.ens_prob.frames_by_threshold[state.x][k24];
+  let when, main;
+  if (state.mode === "3h") {
+    const k = frameIndex(Pr.hres_3h.frames), f = Pr.hres_3h.frames[k];
+    when = f.label_ist; main = `Rain in 3 hours: ${fmtMm(src.val("hres_3h", [k]), f.lowest_drawn)}`;
+  } else {
+    when = f24.label_ist; main = `Rain in 24 hours (HRES): ${fmtMm(src.val("hres_24h", [k24]), f24.lowest_drawn)}`;
+  }
+  const pct = src.val("ens_prob", [kx, k24]);
+  const flag = cellFlag(m, state.x, k24, idx);
+  const pose = poseFor(app, k24);
+  card.innerHTML = "";
+  card.dataset.pose = pose;
+  const head = el("div", "pc-head");
+  const near = el("p", "pc-near", nearText(app.places || [], point.lat, point.lon));
+  const x = el("button", "pc-close", "×");
+  x.type = "button"; x.setAttribute("aria-label", "Close the point summary (Esc)");
+  x.addEventListener("click", () => closeCard(app));
+  head.append(near, x);
+  const body = el("div", "pc-body");
+  const text = el("div", "pc-text");
+  text.append(el("p", "pc-when", when), el("p", "pc-main", main));
+  // non-breaking spaces keep "100 %" and "10 mm" together in the narrow card
+  const chip = el("span", "pc-chip", `${state.mode === "3h" ? "24 h chance" : "Chance"} of ≥\u00a0${fmt(state.x)}\u00a0mm: ${fmtPct(pct, ef.lowest_drawn).replace(" %", "\u00a0%")}`);
+  const bg = pct < ef.lowest_drawn ? null : binColour(Pr.ens_prob, pct);
+  if (bg) { chip.style.background = bg; chip.style.color = textOn(bg); }
+  text.appendChild(chip);
+  if (flag) text.appendChild(el("p", "pc-badge " + flag.kind,
+    flag.kind === "wetter" ? "▨ Detailed run much wetter than the ensemble" : "• Detailed run much drier than the ensemble"));
+  body.appendChild(text);
+  if (guideOn()) {
+    const g = el("figure", "pc-guide");
+    g.innerHTML = guideSVG(pose);
+    g.appendChild(el("figcaption", null, POSE[pose].caption));
+    body.appendChild(g);
+  }
+  const more = el("button", "pc-more", "Full details");
+  more.type = "button";
+  more.addEventListener("click", () => {
+    closeCard(app);
+    const box = $("point");
+    box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    $("point-title").setAttribute("tabindex", "-1");
+    $("point-title").focus({ preventScroll: true });
+  });
+  card.append(head, body, more);
+  // field names for checks: same texts as the panel's data-fields
+  near.dataset.field = "card-near"; text.querySelector(".pc-main").dataset.field = "card-main"; chip.dataset.field = "card-chip";
+  card.hidden = false;
+  positionCard(app);
+}
+
+function positionCard(app) {
+  const card = $("pcard");
+  if (card.hidden || !app.point) return;
+  if (window.matchMedia("(max-width: 700px)").matches) { card.classList.add("sheet"); card.style.left = card.style.top = ""; return; }
+  card.classList.remove("sheet");
+  const map = app.map, size = map.getSize(), pt = map.latLngToContainerPoint([app.point.lat, app.point.lon]);
+  const w = card.offsetWidth, h = card.offsetHeight, gap = 16;
+  let left = pt.x + gap, top = pt.y - h / 2;
+  if (left + w > size.x - 6) left = pt.x - gap - w;              // flip to the left of the point near the right edge
+  left = Math.max(6, Math.min(left, size.x - w - 6));
+  top = Math.max(44, Math.min(top, size.y - h - 6));               // clear of the "Showing" pill at the top
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+}
+
+function closeCard(app) {
+  app.cardClosed = true;
+  $("pcard").hidden = true;
 }
 
 /* ---------------- render ---------------- */
@@ -1189,7 +1327,19 @@ function wire(app) {
   }, true);
   window.__rainOutlook.cross = cur;          // for dev checks only (same object as app.cursor)
   $("point-close").addEventListener("click", () => closePoint(app));
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("point").hidden) closePoint(app); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("pcard").hidden) { closeCard(app); return; }       // first Esc: the card; second: the panel
+    if (!$("point").hidden) closePoint(app);
+  });
+  map.on("move zoom resize", () => positionCard(app));
+  const guide = $("guide");
+  guide.checked = guideOn();
+  guide.addEventListener("change", () => {
+    try { localStorage.setItem("guide", guide.checked ? "on" : "off"); } catch (e) { /* private mode: this page only */ }
+    if (app.point && app.src && !$("pcard").hidden) renderCard(app);
+  });
+  window.__rainOutlook.app = app;            // dev checks
 }
 
 async function main() {

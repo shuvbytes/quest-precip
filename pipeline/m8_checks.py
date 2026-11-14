@@ -304,5 +304,103 @@ def layout():
     return ok
 
 
+def _pose_examples(x="10", t=0):
+    """One grid point per pose for the current local build, chosen in Python with the card's rules."""
+    import json
+    sys.path.insert(0, str(s.ROOT / "api"))
+    import pointcore as pc
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    a = pc.decode(m, (s.SITE / "data" / "points.bin").read_bytes())
+    g = m["grid"]
+    k = pc.window_index(m["products"]["hres_24h"]["frames"], t)
+    keys = pc.threshold_keys(m)
+    found = {}
+    for row in range(0, g["nlat"], 2):
+        for col in range(0, g["nlon"], 2):
+            idx = row * g["nlon"] + col
+            if pc.cell_flag(m, x, k, idx):
+                pose = "disagree"
+            elif a["ens_prob"][keys.index("50"), k, row, col] >= 50:
+                pose = "heavy"
+            elif a["hres_24h"][k, row, col] >= 1 or a["ens_prob"][keys.index("1"), k, row, col] >= 50:
+                pose = "light"
+            else:
+                pose = "dry"
+            found.setdefault(pose, (g["lat_north"] - row * g["dlat"], g["lon_west"] + col * g["dlon"]))
+    return found
+
+
+def card():
+    httpd, port = s.serve()
+    ok = True
+    base = f"http://127.0.0.1:{port}/index.html?api=off"
+    try:
+        for t in (0, 48, 96):
+            ex = _pose_examples("10", t)
+            print(f"t={t}: pose examples {ex}")
+            for pose, (lat, lon) in ex.items():
+                with Browser(1440, 900) as b:
+                    b.open(f"{base}#mode=24h&fill=chance&x=10&t={t}&p={lat:.2f},{lon:.2f}")
+                    b.wait("!document.getElementById('pcard').hidden", 20)
+                    r = b.js("""(() => { const c = document.getElementById('pcard'), f = (n) => (document.querySelector(`[data-field="${n}"]`) || {}).textContent;
+                      const map = window.__rainOutlook.map, app = window.__rainOutlook.app, pt = map.latLngToContainerPoint([app.point.lat, app.point.lon]);
+                      const cr = c.getBoundingClientRect(), mr = document.getElementById('map').getBoundingClientRect();
+                      const px = pt.x + mr.left, py = pt.y + mr.top;
+                      return {pose: c.dataset.pose, near: f('card-near') === f('near'), main: f('card-main') === f('sum-24h'),
+                        chip: (f('card-chip') || '').replace(/\u00a0/g, ' ').endsWith((f('sum-ens') || '').split(': ').pop()), badge: !!c.querySelector('.pc-badge'),
+                        panelDisagree: !!document.querySelector('[data-field=disagree]'),
+                        alt: (c.querySelector('svg') || {}).getAttribute && c.querySelector('svg').getAttribute('aria-label'),
+                        onScreen: cr.left >= mr.left && cr.right <= mr.right + 1 && cr.top >= mr.top && cr.bottom <= mr.bottom + 1,
+                        coversPoint: px >= cr.left && px <= cr.right && py >= cr.top && py <= cr.bottom,
+                        main_text: f('card-main'), chip_text: f('card-chip')}; })()""")
+                    good = (r["pose"] == pose and r["near"] and r["main"] and r["chip"] and r["badge"] == r["panelDisagree"]
+                            and bool(r["alt"]) and r["onScreen"] and not r["coversPoint"])
+                    print(f"  {'PASS' if good else 'FAIL'}  {pose:8s} at {lat:.2f},{lon:.2f}: card pose {r['pose']}; '{r['main_text']}' | "
+                          f"'{r['chip_text']}' | badge {r['badge']} (panel sentence {r['panelDisagree']}); on screen {r['onScreen']}, "
+                          f"covers point {r['coversPoint']}")
+                    if pose == "disagree" and t == 0:
+                        b.screenshot(s.OUT / "m8c_card_disagree.png")
+                    if pose == "heavy" and t == 0:
+                        b.screenshot(s.OUT / "m8c_card_heavy.png")
+                    ok &= good
+        # behaviour: Esc order, x, Full details, guide toggle (persisted), phone sheet
+        with Browser(1440, 900) as b:
+            b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
+            b.wait("!document.getElementById('pcard').hidden", 20)
+            b.key("Escape")
+            e1 = b.js("[document.getElementById('pcard').hidden, document.getElementById('point').hidden]")
+            b.key("Escape")
+            e2 = b.js("[document.getElementById('pcard').hidden, document.getElementById('point').hidden]")
+            res = [("Esc closes the card first, then the panel", e1 == [True, False] and e2 == [True, True])]
+            b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
+            b.wait("!document.getElementById('pcard').hidden", 20)
+            b.js("document.querySelector('.pc-close').click()")
+            res.append(("x closes the card, panel stays", b.js("[document.getElementById('pcard').hidden, document.getElementById('point').hidden]") == [True, False]))
+            b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
+            b.wait("!document.getElementById('pcard').hidden", 20)
+            b.js("document.querySelector('.pc-more').click()")
+            res.append(("Full details: card closes, focus on the panel title", b.js("document.activeElement.id") == "point-title"))
+            b.js("document.getElementById('guide').click()")
+            b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
+            b.wait("!document.getElementById('pcard').hidden", 20)
+            res.append(("guide toggle hides the character (also after reload)", b.js("!document.querySelector('#pcard svg') && !document.getElementById('guide').checked")))
+            b.js("document.getElementById('guide').click()")
+            b.js("new Promise(r => setTimeout(r, 100))")
+            res.append(("toggle on again shows it", b.js("!!document.querySelector('#pcard svg')")))
+        with Browser(390, 844, mobile=True) as b:
+            b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
+            b.wait("!document.getElementById('pcard').hidden", 20)
+            sheet = b.js("(() => { const r = document.getElementById('pcard').getBoundingClientRect(); return [document.getElementById('pcard').classList.contains('sheet'), Math.round(r.bottom), innerHeight, Math.round(r.width)]; })()")
+            b.screenshot(s.OUT / "m8c_card_phone.png")
+            res.append(("phone: bottom sheet, full width", sheet[0] and abs(sheet[1] - sheet[2]) <= 1 and sheet[3] == 390))
+        for name, good in res:
+            print(f"{'PASS' if good else 'FAIL'}  {name}")
+            ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card}[sys.argv[1]]() else 1)
