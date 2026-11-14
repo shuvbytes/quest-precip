@@ -1114,6 +1114,20 @@ function renderCard(app) {
   near.dataset.field = "card-near"; text.querySelector(".pc-main").dataset.field = "card-main"; chip.dataset.field = "card-chip";
   card.hidden = false;
   positionCard(app);
+  updateMore();
+}
+
+/* "Full details" only when the panel's point details are NOT on screen (user, 14 Nov): phones (panel below the map),
+   short screens (controls first in the panel), or a side panel scrolled away. On a desktop with them in view it would
+   only repeat what is already visible, so it is hidden. */
+function updateMore() {
+  const more = document.querySelector("#pcard .pc-more");
+  if (!more || $("point").hidden) return;
+  const t = $("point-title").getBoundingClientRect(), p = $("panel").getBoundingClientRect();
+  const card = $("pcard"), sheetTop = card.classList.contains("sheet") ? card.getBoundingClientRect().top : innerHeight;
+  const top = Math.max(0, p.top), bottom = Math.min(innerHeight, p.bottom, sheetTop);   // the phone sheet covers the bottom
+  const inView = t.height > 0 && t.top >= top - 1 && t.bottom <= bottom + 1;
+  more.hidden = inView;
 }
 
 function positionCard(app) {
@@ -1333,6 +1347,9 @@ function wire(app) {
     if (!$("point").hidden) closePoint(app);
   });
   map.on("move zoom resize", () => positionCard(app));
+  $("panel").addEventListener("scroll", updateMore, { passive: true });
+  window.addEventListener("scroll", updateMore, { passive: true });
+  window.addEventListener("resize", updateMore);
   const guide = $("guide");
   guide.checked = guideOn();
   guide.addEventListener("change", () => {

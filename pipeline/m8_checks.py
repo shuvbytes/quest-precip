@@ -378,8 +378,15 @@ def card():
             res.append(("x closes the card, panel stays", b.js("[document.getElementById('pcard').hidden, document.getElementById('point').hidden]") == [True, False]))
             b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
             b.wait("!document.getElementById('pcard').hidden", 20)
+            more = lambda: b.js("!document.querySelector('.pc-more').hidden")
+            res.append(("desktop, details in view: no 'Full details' button", not more()))
+            b.js("document.getElementById('panel').scrollTop = 1e6")
+            b.js("new Promise(r => setTimeout(r, 100))")
+            shown = more()
             b.js("document.querySelector('.pc-more').click()")
-            res.append(("Full details: card closes, focus on the panel title", b.js("document.activeElement.id") == "point-title"))
+            b.js("new Promise(r => setTimeout(r, 600))")
+            res.append(("desktop, side panel scrolled away: button shown; click closes the card and focuses the panel title",
+                        shown and b.js("document.activeElement.id") == "point-title" and b.js("document.getElementById('pcard').hidden")))
             b.js("document.getElementById('guide').click()")
             b.open(f"{base}#mode=24h&fill=chance&x=10&t=0&p=13.00,80.25")
             b.wait("!document.getElementById('pcard').hidden", 20)
@@ -393,6 +400,10 @@ def card():
             sheet = b.js("(() => { const r = document.getElementById('pcard').getBoundingClientRect(); return [document.getElementById('pcard').classList.contains('sheet'), Math.round(r.bottom), innerHeight, Math.round(r.width)]; })()")
             b.screenshot(s.OUT / "m8c_card_phone.png")
             res.append(("phone: bottom sheet, full width", sheet[0] and abs(sheet[1] - sheet[2]) <= 1 and sheet[3] == 390))
+            res.append(("phone, details below the map: button shown", b.js("!document.querySelector('.pc-more').hidden")))
+            b.js("document.querySelector('.pc-more').click()")
+            b.js("new Promise(r => setTimeout(r, 900))")
+            res.append(("phone: Full details scrolls the details into view", b.js("(() => { const r = document.getElementById('point-title').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()")))
         for name, good in res:
             print(f"{'PASS' if good else 'FAIL'}  {name}")
             ok &= good

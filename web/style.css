@@ -317,6 +317,7 @@ body {
 .pc-more { margin-top: 8px; width: 100%; font: inherit; font-weight: 600; padding: 6px; min-height: 34px;
   border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; cursor: pointer; }
 .pc-more:hover { background: #eef4fc; }
+.pc-more[hidden] { display: none; }
 .pcard.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; border-radius: 14px 14px 0 0;
   padding: 10px 14px 14px; z-index: 1500; box-shadow: 0 -6px 24px rgba(0,0,0,.2); }
 .guide-toggle { margin-top: 10px; }

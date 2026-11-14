@@ -615,8 +615,10 @@ visible; header scrolled away; region does not fit). Build after A and B:
   API took the build on try 1; live check: labels (Chennai), search, "Near Chennai (11 km)", values from the Render API,
   footer credits, 844×390 map 342 px with no page scroll. User confirmed landscape in Safari Responsive Design Mode.
 - Card next to the selected point (phones: bottom sheet): nearest place, IST window, main number (3 h or 24 h as the mode),
-  chance chip for X in the 24 h window (palette colour), disagreement badge, "Full details" (closes the card, focuses the
-  panel title). Same data code as the panel. Esc closes the card first, then the panel; × closes the card only.
+  chance chip for X in the 24 h window (palette colour), disagreement badge, "Full details" (closes the card, scrolls to and
+  focuses the panel title). **"Full details" only when needed (user, 14 Nov):** shown only if the panel's point heading is not
+  on screen (phones: below the map or under the bottom sheet; short screens; side panel scrolled away); hidden on a desktop
+  with the details in view, where it would only repeat them. Same data code as the panel. Esc closes the card first, then the panel; × closes the card only.
 - **Weather guide** (original, simple SVG shapes; alt text per pose; toggle "Show the weather guide…" in the side panel,
   remembered in localStorage with try/catch). **Pose rules** (24 h window under the slider, first match wins):
   disagree = point flagged wetter/drier at the current X (same flag as the panel sentence); heavy = ENS P(≥ 50 mm) ≥ 50 %;
