@@ -351,3 +351,22 @@ body {
 .skies-row { display: flex; gap: 8px; align-items: center; }
 .skies-grid { display: block; flex: none; }
 .skies-cap { margin: 0; font-size: 0.72rem; color: var(--ink-2); line-height: 1.25; }
+
+/* ---------- swipe compare (feature 3) ---------- */
+.swipe { position: absolute; z-index: 780; top: 0; bottom: 0; width: 0; }
+.swipe[hidden], .swipe-labels[hidden] { display: none; }
+.swipe-line { position: absolute; top: 0; bottom: 0; left: -1.5px; width: 3px; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.55); pointer-events: none; }
+.swipe-handle { position: absolute; top: 50%; left: -19px; width: 38px; height: 38px; margin-top: -19px; border-radius: 50%;
+  border: 2px solid #2b2f36; background: #fff; color: #2b2f36; font-size: 18px; line-height: 1; cursor: ew-resize;
+  touch-action: none; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 0; }
+.swipe-handle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.swipe-labels { position: absolute; z-index: 781; left: 0; right: 0; bottom: 12px; height: 0; pointer-events: none; }
+.swipe-labels span { position: absolute; bottom: 0; white-space: nowrap; font-size: 0.74rem; font-weight: 650;
+  background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.seg-big.dimmed { opacity: 0.45; }
+.cmp-leg + .cmp-leg { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (max-height: 560px) and (min-aspect-ratio: 4/3) {
+  .swipe-labels span { font-size: 0.66rem; padding: 2px 5px; }
+  .swipe-handle { width: 32px; height: 32px; left: -16px; margin-top: -16px; font-size: 15px; }
+}

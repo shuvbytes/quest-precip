@@ -30,6 +30,15 @@
       <div class="crosshair" id="crosshair" aria-hidden="true" hidden></div>
       <div class="cross-readout" id="cross-readout" aria-hidden="true" hidden></div>
       <section class="pcard" id="pcard" aria-label="Summary at the selected point" hidden></section>
+      <!-- Swipe compare (feature 3): divider + labels; the two images are clipped at the divider by app.js -->
+      <div class="swipe" id="swipe" hidden>
+        <div class="swipe-line"></div>
+        <button type="button" class="swipe-handle" id="swipe-handle" role="slider" aria-valuemin="5" aria-valuemax="95"
+                aria-valuenow="50" aria-label="Compare divider: single run on the left, ensemble on the right">⇔</button>
+      </div>
+      <div class="swipe-labels" id="swipe-labels" hidden>
+        <span class="sl-left" id="swipe-left"></span><span class="sl-right" id="swipe-right"></span>
+      </div>
       <p class="sr-only" id="cross-live" aria-live="polite"></p>
       <div class="map-labels">
         <div class="showing" id="showing" aria-live="polite"></div>
@@ -76,6 +85,10 @@
           <span>Mark where the single detailed run and the ensemble disagree</span>
         </label>
         <p class="zoom-note-inline" id="zoom-note-inline" hidden></p>
+        <label class="check">
+          <input type="checkbox" id="cmp">
+          <span>Compare side by side: single run (left) and ensemble (right), with a draggable divider</span>
+        </label>
       </div>
 
       <div class="time">

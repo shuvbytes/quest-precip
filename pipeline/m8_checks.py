@@ -596,5 +596,121 @@ def skies():
     return ok
 
 
+def _swipe_point(x="10", t=0):
+    """A sea grid point far from labels whose HRES 24 h and ENS chance both fall in one visible colour bin over its 3x3
+    neighbourhood (so a pixel at its centre has an unambiguous expected colour on each side)."""
+    import json
+    import numpy as np
+    sys.path.insert(0, str(s.ROOT / "api"))
+    import pointcore as pc
+    from render import classify
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    a = pc.decode(m, (s.SITE / "data" / "points.bin").read_bytes())
+    P, g = m["products"], m["grid"]
+    k = pc.window_index(P["hres_24h"]["frames"], t)
+    fr, fe = P["hres_24h"]["frames"][k], P["ens_prob"]["frames_by_threshold"][x][k]
+    kx = pc.threshold_keys(m).index(x)
+    cr = classify(a["hres_24h"][k], P["hres_24h"]["bins"], fr["lowest_drawn"], len(P["hres_24h"]["colours"]))
+    ce = classify(a["ens_prob"][kx, k], P["ens_prob"]["bins"], fe["lowest_drawn"], len(P["ens_prob"]["colours"]))
+    places = pc.places_from_json(json.loads((s.SITE / "geo" / "places.json").read_text()))
+    best = None
+    for r in range(3, g["nlat"] - 3):
+        for c in range(3, g["nlon"] - 3):
+            br, be = cr[r - 1:r + 2, c - 1:c + 2], ce[r - 1:r + 2, c - 1:c + 2]
+            if br.min() == br.max() > 0 and be.min() == be.max() > 0:
+                lat, lon = g["lat_north"] - r * g["dlat"], g["lon_west"] + c * g["dlon"]
+                if min(pc.distance_km(lat, lon, q["lat"], q["lon"]) for q in places) > 150:
+                    best = (lat, lon, P["hres_24h"]["colours"][cr[r, c] - 1], P["ens_prob"]["colours"][ce[r, c] - 1],
+                            float(a["hres_24h"][k, r, c]), float(a["ens_prob"][kx, k, r, c]))
+                    break
+        if best:
+            break
+    return best
+
+
+def swipe():
+    import time
+    from PIL import Image
+    httpd, port = s.serve()
+    ok = True
+    res = []
+    pick = _swipe_point()
+    lat, lon, col_r, col_e, v_r, v_e = pick
+    print(f"test point {lat:.2f}N {lon:.2f}E: HRES {v_r:.1f} mm -> {col_r}; ENS {v_e:.0f} % -> {col_e}")
+    hexrgb = lambda h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+    def pixel(b, path):
+        b.screenshot(path)
+        x, y = b.js(f"(() => {{ const p = window.__rainOutlook.map.latLngToContainerPoint([{lat}, {lon}]), r = document.getElementById('map').getBoundingClientRect(); return [r.left + p.x, r.top + p.y]; }})()")
+        return Image.open(path).convert("RGB").getpixel((round(x), round(y)))
+    close = lambda p, h: max(abs(p[i] - hexrgb(h)[i]) for i in range(3)) <= 6
+    base = f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x=10&t=0&hatch=0&z=7&c={lat},{lon}&cmp=1"
+    try:
+        with Browser(1440, 900) as b:
+            for sw, side, want in ((70, "left", col_r), (30, "right", col_e)):
+                b.open(f"{base}&sw={sw}")
+                time.sleep(0.5)
+                px = pixel(b, s.OUT / f"swipe_pixel_{side}.png")
+                res.append((f"divider {sw} %: point is on the {side} -> pixel {px} = {'HRES' if side == 'left' else 'ENS'} colour {want}", close(px, want)))
+            # drag with a real mouse: from the handle to 25 % of the map width
+            b.open(f"{base}&sw=50")
+            hx, hy = b.js("(() => { const r = document.getElementById('swipe-handle').getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; })()")
+            mr = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left, r.width]; })()")
+            b.call("Input.dispatchMouseEvent", type="mousePressed", x=hx, y=hy, button="left", clickCount=1)
+            for f in (0.45, 0.35, 0.25):
+                b.call("Input.dispatchMouseEvent", type="mouseMoved", x=mr[0] + f * mr[1], y=hy, button="left")
+            b.call("Input.dispatchMouseEvent", type="mouseReleased", x=mr[0] + 0.25 * mr[1], y=hy, button="left", clickCount=1)
+            time.sleep(0.6)
+            st = b.js("[+document.getElementById('swipe-handle').getAttribute('aria-valuenow'), document.body.dataset.point || '', location.hash.includes('sw=25')]")
+            res.append((f"mouse drag to 25 %: divider {st[0]} %, no point selected, URL has sw=25", st[0] == 25 and st[1] == "" and st[2]))
+            px = pixel(b, s.OUT / "swipe_after_drag.png")
+            res.append((f"after the drag to 25 % the centred point is on the right side -> ENS colour {px}", close(px, col_e)))
+            t0 = b.js("document.getElementById('t-label').textContent")
+            b.js("document.getElementById('swipe-handle').focus()")
+            vals = []
+            for k_, sh in (("ArrowLeft", False), ("ArrowRight", True), ("Home", False), ("End", False)):
+                b.key(k_, shift=sh)
+                vals.append(int(b.js("document.getElementById('swipe-handle').getAttribute('aria-valuenow')")))
+            res.append((f"keyboard: ← -5, Shift+→ +20, Home, End -> {vals}; time window unchanged",
+                        vals == [20, 40, 5, 95] and b.js("document.getElementById('t-label').textContent") == t0))
+            # map click still selects a point; hatching unclipped on both sides
+            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x=100&t=96&hatch=1&cmp=1&sw=50")
+            hatch = b.js("(() => { const i = [...document.querySelectorAll('.leaflet-hatch-pane img')].find(e => e.src.includes('disagree')); if (!i) return null; const r = i.getBoundingClientRect(), x = +document.getElementById('map').dataset.swipe + document.getElementById('map').getBoundingClientRect().left; return [i.style.clipPath || '', r.left < x && r.right > x]; })()")
+            res.append((f"hatching drawn across the divider, not clipped: {hatch}", bool(hatch) and hatch[0] == "" and hatch[1]))
+            mx, my = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left + r.width * 0.7, r.top + r.height * 0.7]; })()")
+            for t_ in ("mousePressed", "mouseReleased"):
+                b.call("Input.dispatchMouseEvent", type=t_, x=mx, y=my, button="left", clickCount=1)
+            b.wait("/^-?\\d/.test(document.body.dataset.point || '') || document.body.dataset.point === 'outside' || document.body.dataset.point === 'loading'", 10)
+            res.append(("a map click still selects a point in compare mode", bool(b.js("document.body.dataset.point"))))
+            b.screenshot(s.OUT / "swipe_desktop.png")
+            # turning compare off restores the normal map
+            b.js("document.getElementById('cmp').click()")
+            time.sleep(0.3)
+            off = b.js("[document.getElementById('swipe').hidden, document.querySelectorAll('.leaflet-fill2-pane img').length, (document.querySelector('.leaflet-fill-pane img') || {style: {}}).style.clipPath || '']")
+            res.append((f"toggle off: divider hidden, right image removed, no clipping: {off}", off[0] and off[1] == 0 and off[2] == ""))
+        for name, w, h in (("portrait", 390, 844), ("landscape", 844, 390)):
+            with Browser(w, h, mobile=True) as b:
+                b.call("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=1)
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x=10&t=0&cmp=1&sw=50")
+                hx, hy = b.js("(() => { const r = document.getElementById('swipe-handle').getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; })()")
+                mr = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left, r.width]; })()")
+                b.call("Input.dispatchTouchEvent", type="touchStart", touchPoints=[{"x": hx, "y": hy}])
+                for f in (0.6, 0.7, 0.75):
+                    b.call("Input.dispatchTouchEvent", type="touchMove", touchPoints=[{"x": mr[0] + f * mr[1], "y": hy}])
+                b.call("Input.dispatchTouchEvent", type="touchEnd", touchPoints=[])
+                time.sleep(0.4)
+                v = int(b.js("document.getElementById('swipe-handle').getAttribute('aria-valuenow')"))
+                lab = b.js("(() => { const a = document.getElementById('swipe-left').getBoundingClientRect(), c = document.getElementById('swipe-right').getBoundingClientRect(), m = document.getElementById('map').getBoundingClientRect(); return [a.left >= m.left - 1 && c.right <= m.right + 1, a.right <= c.left + 1 || a.top >= c.bottom - 1, document.documentElement.scrollWidth > innerWidth]; })()")
+                b.screenshot(s.OUT / f"swipe_{name}.png")
+                res.append((f"{name}: touch drag -> divider {v} %, both labels inside the map and not overlapping, no sideways scroll",
+                            v == 75 and lab[0] and lab[1] and not lab[2]))
+        for name, good in res:
+            print(f"{'PASS' if good else 'FAIL'}  {name}")
+            ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies, "swipe": swipe}[sys.argv[1]]() else 1)

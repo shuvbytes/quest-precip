@@ -635,7 +635,7 @@ visible; header scrolled away; region does not fit). Build after A and B:
 
 ## Rename + interactive features plan (user decisions, 14 Nov)
 - Order: 0 rename → 1 play → 2 "100 skies" (each checked locally, then deployed) → STOP features, write README (outline
-  first) → 3 swipe compare → 5 story mode → 4 plan my day. A feature that is not solid is reverted to the last good commit.
+  first) → 3 swipe compare → 5 story mode → 4 plan my day. (14 Nov: user asked for 3 before deploying 1+2.) A feature that is not solid is reverted to the last good commit.
 - 1 Play: never autoplay; prefers-reduced-motion → 2 s steps instead of 1 s; any interaction pauses.
 - 5 Story rules (approved with tweaks): heaviest 24 h; largest disagreement cluster at thresholds ≥ 10 mm (lower only if
   none); dry-vs-wet contrast where the wet point is in a group of ≥ 3 cells with ≥ 20 mm and a < 1 mm cell within 2 grid
@@ -669,6 +669,20 @@ visible; header scrolled away; region does not fit). Build after A and B:
   Earlier tries: grey closed umbrellas (2:1 on white, invisible), ochre umbrellas (visible but still unreadable shapes).
   Checks updated (squares counted by data-c; geometry: 100 distinct cells ≥ 5 px; key text); card check's guide-alt test now
   targets the guide SVG (the first SVG in the card is now a decorative key icon).
+
+## Feature 3 — swipe compare (14 Nov; user moved it before deploying 1+2) — `web/app.js` updateSwipe, `m8_checks.py swipe`
+- Toggle "Compare side by side…" in the 24 h controls (off by default; URL `cmp=1&sw=50`). Left = HRES 24 h total (pane fill),
+  right = ENS chance for X (pane fill2), same window; each image clipped at the divider with clip-path (recomputed on
+  move/zoom/resize/load); hatch pane above both, unclipped. Divider: full-height line + round handle (role slider):
+  pointer drag (mouse/touch/pen, pointer capture), ←/→ 5 %, Shift 20 %, Home/End; never selects a point or steps time.
+  Labels each side (short on maps < 640 px; stacked when colliding). Legend shows both scales with their own floor notes;
+  colour buttons dimmed while comparing; "Showing: Comparing: …".
+- Check (real events): pixel at a test point (15.75N 86.50E, 3×3-uniform bins, far from labels) = HRES colour #5daaf5 with
+  the divider right of it, ENS colour #e657b1 left of it (also after a real mouse drag to 25 %); keyboard values
+  [20, 40, 5, 95], time unchanged; hatch img unclipped across the divider; map click selects a point; toggle off restores
+  the single image; phone portrait/landscape: real touch drag to 75 %, labels inside the map without overlap.
+- Bugs found on the way: left legend showed the chance scale (legend chose the product from the fill state); labels
+  overlapped on a 390 px phone.
 
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes

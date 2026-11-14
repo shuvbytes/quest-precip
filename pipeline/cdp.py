@@ -24,6 +24,7 @@ KEYS = {  # key -> (code, windowsVirtualKeyCode)
     "ArrowUp": ("ArrowUp", 38), "ArrowDown": ("ArrowDown", 40), "ArrowLeft": ("ArrowLeft", 37),
     "ArrowRight": ("ArrowRight", 39), "Enter": ("Enter", 13), "Escape": ("Escape", 27), "Tab": ("Tab", 9),
     " ": ("Space", 32), "+": ("Equal", 187), "-": ("Minus", 189),
+    "Home": ("Home", 36), "End": ("End", 35),
 }
 
 

@@ -57,7 +57,7 @@ function makeMap(m) {
   // Draw order (bottom -> top): land fill, rain/chance image, disagreement hatch, coast + India boundary lines.
   // "outside" = shading beyond the forecast area (no data there); it never overlaps the data image.
   // "places" = city/country/sea labels (M8), above the data and lines, never clickable (clicks reach the map).
-  [["land", 200], ["fill", 300], ["outside", 320], ["hatch", 350], ["lines", 450], ["places", 455], ["edge-labels", 460]].forEach(([name, z]) => {
+  [["land", 200], ["fill", 300], ["fill2", 301], ["outside", 320], ["hatch", 350], ["lines", 450], ["places", 455], ["edge-labels", 460]].forEach(([name, z]) => {
     map.createPane(name).style.zIndex = z;
   });
   ["lines", "outside", "places", "edge-labels"].forEach((p) => { map.getPane(p).style.pointerEvents = "none"; });
@@ -175,7 +175,7 @@ function addForecastEdge(map, m) {
 
 /* ---------------- state (kept in the URL hash, so a view can be shared or bookmarked) ---------------- */
 
-const state = { mode: "24h", fill: "chance", x: "10", hatch: true, t: 0, p: null };   // p = [lat, lon] of a grid point
+const state = { mode: "24h", fill: "chance", x: "10", hatch: true, t: 0, p: null, cmp: false, swipe: 0.5 };   // p = [lat, lon] of a grid point
 
 function readHash(m) {
   const h = new URLSearchParams(location.hash.slice(1));
@@ -183,6 +183,9 @@ function readHash(m) {
   if (["rain", "chance"].includes(h.get("fill"))) state.fill = h.get("fill");
   if (h.get("x") && m.products.ens_prob.frames_by_threshold[h.get("x")]) state.x = h.get("x");
   if (h.get("hatch") === "0") state.hatch = false;
+  if (h.get("cmp") === "1") state.cmp = true;
+  const sw = +h.get("sw");
+  if (h.get("sw") !== null && sw >= 5 && sw <= 95) state.swipe = sw / 100;
   if (h.get("t") !== null && !isNaN(+h.get("t"))) state.t = +h.get("t");
   const pp = (h.get("p") || "").split(",").map(Number);
   if (pp.length === 2 && pp.every(Number.isFinite)) state.p = pp;
@@ -199,6 +202,7 @@ function writeHash() {
   hashTimer = setTimeout(() => {
     const h = new URLSearchParams({ mode: state.mode, t: state.t });
     if (state.mode === "24h") { h.set("fill", state.fill); h.set("x", state.x); h.set("hatch", state.hatch ? 1 : 0); }
+    if (state.mode === "24h" && state.cmp) { h.set("cmp", 1); h.set("sw", Math.round(state.swipe * 100)); }
     if (state.p) h.set("p", state.p.map((v) => v.toFixed(2)).join(","));
     const next = "#" + h.toString();
     if (next === location.hash) return;
@@ -228,9 +232,61 @@ function hatchFrame(m, k) {
 
 function showingText(m) {
   const P = m.products;
+  if (state.mode === "24h" && state.cmp)
+    return `Comparing: left, rain total (single run) · right, chance of ≥ ${xLabel(state.x)} mm (ensemble)`;
   if (state.mode === "3h") return P.hres_3h.title;
   if (state.fill === "rain") return P.hres_24h.title;
   return P.ens_prob.title.replace(" X ", ` ${xLabel(state.x)} `);
+}
+
+/* Compare mode legend: both scales, each with its own frame's floor note (left rain, right chance) */
+function renderCompareLegend(m, k) {
+  const P = m.products, box = $("legend"), saveFill = state.fill;
+  const part = (fill, frame, side) => {
+    state.fill = fill;                                   // renderLegend picks the product from state.fill
+    renderLegend(m, frame);
+    const d = el("div", "cmp-leg");
+    d.innerHTML = box.innerHTML;
+    d.querySelector("h3").prepend(side);
+    return d;
+  };
+  const left = part("rain", P.hres_24h.frames[k], "Left: ");
+  const right = part("chance", P.ens_prob.frames_by_threshold[state.x][k], "Right: ");
+  state.fill = saveFill;
+  const hk = left.querySelector(".hatch-key"); if (hk) hk.remove();    // the hatch key once, after the right scale
+  box.innerHTML = "";
+  box.append(left, right);
+}
+
+/* Swipe compare (feature 3): clip each image at the divider. clip-path insets are in the image's own CSS pixels,
+   so the divider's screen x is converted with the image's current on-screen box (also right during zoom). */
+function updateSwipe(app) {
+  const { map, fill, fill2 } = app, cmp = state.mode === "24h" && state.cmp;
+  const a = fill.getElement(), b = fill2.getElement();
+  if (!cmp) { if (a) a.style.clipPath = ""; return; }
+  const size = map.getSize(), x = Math.round(state.swipe * size.x), mr = map.getContainer().getBoundingClientRect();
+  const clip = (img, side) => {
+    if (!img) return;
+    const r = img.getBoundingClientRect();
+    if (!r.width) return;
+    const scale = img.offsetWidth / r.width, local = (x - (r.left - mr.left)) * scale;
+    img.style.clipPath = side === "left"
+      ? `inset(0 ${Math.max(0, img.offsetWidth - local)}px 0 0)` : `inset(0 0 0 ${Math.max(0, local)}px)`;
+  };
+  clip(a, "left"); clip(b, "right");
+  const sw = $("swipe"), handle = $("swipe-handle");
+  sw.style.left = `${x}px`;
+  handle.setAttribute("aria-valuenow", String(Math.round(state.swipe * 100)));
+  handle.setAttribute("aria-valuetext", `divider at ${Math.round(state.swipe * 100)} % of the map width`);
+  const narrow = size.x < 640;                         // phones: short labels
+  $("swipe-left").textContent = narrow ? "◀ Single run: rain" : "◀ Single run (HRES): rain total";
+  $("swipe-right").textContent = narrow ? `Ensemble: ≥ ${xLabel(state.x)} mm chance ▶` : `Ensemble (ENS): chance of ≥ ${xLabel(state.x)} mm ▶`;
+  const L = $("swipe-left"), R = $("swipe-right");
+  const lx = Math.max(4, x - 6 - L.offsetWidth), rx = Math.min(size.x - 4 - R.offsetWidth, x + 6);
+  L.style.left = `${lx}px`;
+  R.style.left = `${rx}px`;
+  R.style.bottom = rx < lx + L.offsetWidth + 4 ? "26px" : "0px";   // still colliding near an edge: right label one row up
+  map.getContainer().dataset.swipe = String(x);
 }
 
 /* ---------------- times (never use the viewer's time zone: shift UTC by +05:30 and format as UTC) ---------------- */
@@ -1192,7 +1248,21 @@ function render(app) {
   const f = frames[k];
   state.t = f.start_h;
 
-  fill.setUrl(DATA + f.file);
+  const cmp = state.mode === "24h" && state.cmp;
+  if (cmp) {
+    // swipe compare (feature 3): left = HRES 24 h total, right = ENS chance for X, same 24 h window
+    fill.setUrl(DATA + m.products.hres_24h.frames[k].file);
+    app.fill2.setUrl(DATA + m.products.ens_prob.frames_by_threshold[state.x][k].file);
+    if (!map.hasLayer(app.fill2)) app.fill2.addTo(map);
+  } else {
+    fill.setUrl(DATA + f.file);
+    if (map.hasLayer(app.fill2)) map.removeLayer(app.fill2);
+  }
+  $("swipe").hidden = $("swipe-labels").hidden = !cmp;
+  $("cmp").checked = state.cmp;
+  document.querySelector(".seg-big").classList.toggle("dimmed", cmp);
+  document.querySelectorAll("[data-fill]").forEach((b) => b.setAttribute("aria-disabled", String(cmp)));
+  updateSwipe(app);
 
   // Disagreement marks: 24 h mode only; bold images below the readable zoom, fine ones above.
   const minZ = m.products.disagreement.min_zoom_for_marks;
@@ -1228,11 +1298,13 @@ function render(app) {
   s.textContent = "Showing: " + showingText(m);
   $("showing").appendChild(s);
 
-  renderLegend(m, f);
+  if (cmp) renderCompareLegend(m, k);
+  else renderLegend(m, f);
   if (app.point && app.src) renderPointContent(app);
 
   // For checks: what is on screen
-  document.body.dataset.frame = f.file + (hatchFile ? " + " + hatchFile : "");
+  document.body.dataset.frame = (cmp ? `${m.products.hres_24h.frames[k].file} | ${m.products.ens_prob.frames_by_threshold[state.x][k].file}` : f.file)
+    + (hatchFile ? " + " + hatchFile : "");
   writeHash();
   preload(frames, k);
   // For checks: does the page scroll sideways? (must be "false" at phone width)
@@ -1267,6 +1339,33 @@ function wire(app) {
   });
   sel.addEventListener("change", () => { state.x = sel.value; rerender(); });
   $("hatch").addEventListener("change", (e) => { state.hatch = e.target.checked; rerender(); });
+  $("cmp").addEventListener("change", (e) => { state.cmp = e.target.checked; rerender(); });
+  // divider: drag (mouse, touch, pen via pointer events), keyboard (arrows 5 %, Shift 20 %, Home/End)
+  const swipe = $("swipe"), handle = $("swipe-handle");
+  L.DomEvent.disableClickPropagation(swipe);                 // using the divider never selects a map point
+  const setSwipe = (f) => { state.swipe = Math.min(0.95, Math.max(0.05, f)); updateSwipe(app); writeHash(); };
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); handle.setPointerCapture(e.pointerId); handle.focus({ preventScroll: true });
+    const move = (ev) => {
+      const r = map.getContainer().getBoundingClientRect();
+      setSwipe((ev.clientX - r.left) / r.width);
+    };
+    const up = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", up); };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  });
+  handle.addEventListener("keydown", (e) => {
+    const d = e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : 0;
+    if (d) { setSwipe(state.swipe + d * (e.shiftKey ? 0.2 : 0.05)); }
+    else if (e.key === "Home") setSwipe(0.05);
+    else if (e.key === "End") setSwipe(0.95);
+    else return;
+    e.preventDefault(); e.stopPropagation();                 // the page's arrow keys (time window) must not act too
+  });
+  map.on("move zoom zoomend resize viewreset", () => updateSwipe(app));
+  app.fill.on("load", () => updateSwipe(app));
+  app.fill2.on("load", () => updateSwipe(app));
   const step = (d) => {
     const frames = framesFor(m);
     const k = Math.min(frames.length - 1, Math.max(0, frameIndex(frames) + d));
@@ -1436,7 +1535,9 @@ async function main() {
   const fill = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds, opts).addTo(map);
   const hatch = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds,
     { pane: "hatch", className: "px", interactive: false });
-  const app = { m, map, fill, hatch, places, cursor: { row: null, col: null } };
+  const fill2 = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds,
+    { pane: "fill2", className: "px", interactive: false });               // right side in swipe compare (feature 3)
+  const app = { m, map, fill, fill2, hatch, places, cursor: { row: null, col: null } };
   window.__rainOutlook = { map };                 // for dev checks (crosshair test); not used by the page
   // Leaflet measures its box once and only re-measures on window resize. The box also changes when the header and
   // footer text arrive, when fonts load, or when panels change height; a stale size put Leaflet's centre 33-49 px
