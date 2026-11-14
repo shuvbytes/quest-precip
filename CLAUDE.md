@@ -690,6 +690,12 @@ visible; header scrolled away; region does not fit). Build after A and B:
   14 Nov 00z not fired by 14:42 UTC); manual deploys cover it.
 - **User (14 Nov): features 4 (plan my day) and 5 (story mode) deferred to later; next = README (outline first).**
 
+## README written (14 Nov, `5414812`)
+- ~2 screens (77 lines), user: reduce repetition, include a phone screenshot, and a brief "built with Claude Code in one
+  session" note with the start time (first commit Thu 12 Nov 2026 16:22 IST). Images: `docs/readme/bay_disagreement.png`
+  (desktop, 13 Nov 12z) + `docs/readme/phone_card.png` (live site 14 Nov 00z, 390×844 @2x, card at 15.75N 84.00E: 262.2 mm
+  vs 22 % chance of ≥ 50 mm, hatched, guide "models disagree"). Note: the README's numbers are tied to those runs.
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
