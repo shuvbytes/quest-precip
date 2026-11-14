@@ -58,90 +58,145 @@ def search():
     return ok
 
 
-WALK_JS = r"""
+RECORDER_JS = r"""
 (() => {
+  // After every real key press (keyup is not stopped by the page), record where the cross stands and where it is drawn.
   const R = window.__rainOutlook, map = R.map, cur = R.cross, mc = map.getContainer();
-  const g = { n: 38.0, w: 65.0, d: 0.25, nlat: 133, nlon: 141 };
-  const ch = document.getElementById('crosshair'), title = document.getElementById('point-title');
-  const press = (key, shift) => mc.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey: !!shift, bubbles: true, cancelable: true }));
-  for (let i = 0; i < 200; i++) { press('ArrowUp', true); press('ArrowLeft', true); }   // to row 0, col 0
-  const fails = [], size = map.getSize();
-  let visited = 0, selects = 0, selectFails = 0, maxErr = 0;
-  const check = (row, col) => {
-    visited++;
-    if (cur.row !== row || cur.col !== col) { fails.push(`at ${row},${col}: cross ${cur.row},${cur.col}`); return; }
-    const want = map.latLngToContainerPoint([g.n - row * g.d, g.w + col * g.d]);
-    const r = ch.getBoundingClientRect(), m = mc.getBoundingClientRect();
+  const ch = document.getElementById('crosshair');
+  window.__log = [];
+  window.addEventListener('keyup', () => {
+    const want = map.latLngToContainerPoint([38 - cur.row * 0.25, 65 + cur.col * 0.25]);
+    const r = ch.getBoundingClientRect(), m = mc.getBoundingClientRect(), size = map.getSize();
     const x = r.left + r.width / 2 - m.left, y = r.top + r.height / 2 - m.top;
-    const err = Math.hypot(x - want.x, y - want.y); maxErr = Math.max(maxErr, err);
-    if (err > 0.5) fails.push(`at ${row},${col}: drawn ${x.toFixed(1)},${y.toFixed(1)} want ${want.x.toFixed(1)},${want.y.toFixed(1)}`);
-    if (x < 0 || y < 0 || x > size.x || y > size.y) fails.push(`at ${row},${col}: off screen ${x.toFixed(0)},${y.toFixed(0)}`);
-    if (visited % 500 === 1) {                            // Enter selects exactly this grid point
-      press('Enter'); selects++;
-      const lat = (g.n - row * g.d).toFixed(2), lon = (g.w + col * g.d).toFixed(2);
-      if (!title.textContent.includes(`${lat}°N, ${lon}°E`)) { selectFails++; fails.push(`Enter at ${row},${col}: '${title.textContent}'`); }
-    }
-  };
-  for (let row = 0; row < g.nlat; row++) {
-    const right = row % 2 === 0;
-    for (let k = 0; k < g.nlon; k++) {
-      const col = right ? k : g.nlon - 1 - k;
-      check(row, col);
-      if (k < g.nlon - 1) press(right ? 'ArrowRight' : 'ArrowLeft');
-    }
-    if (row < g.nlat - 1) press('ArrowDown');
-  }
-  return { visited, fails: fails.length, firstFails: fails.slice(0, 5), selects, selectFails, maxErr: +maxErr.toFixed(3), zoom: map.getZoom() };
+    window.__log.push([cur.row, cur.col, +Math.hypot(x - want.x, y - want.y).toFixed(2),
+                       x >= 0 && y >= 0 && x <= size.x && y <= size.y && !ch.hidden ? 1 : 0, map.getCenter().lat, map.getCenter().lng]);
+  }, true);
+  return true;
 })()
 """
+
+
+def _walk(b):
+    """Snake walk over every grid point with REAL key events; returns (visited, failures, enters, max_err)."""
+    b.js(RECORDER_JS)
+    b.js("document.querySelector('#map').focus()")
+    for _ in range(14):                                       # Shift+arrows to the north-west corner (row 0, col 0)
+        b.key("ArrowUp", shift=True); b.key("ArrowLeft", shift=True)
+    b.js("window.__log = []")
+    if b.js("[window.__rainOutlook.cross.row, window.__rainOutlook.cross.col]") != [0, 0]:
+        return 0, ["did not reach 0,0"], 0, 0
+    fails, enters, max_err, visited = [], 0, 0.0, 1
+    expect = [(0, 0)]
+    for row in range(133):
+        right = row % 2 == 0
+        for k in range(140):
+            b.key("ArrowRight" if right else "ArrowLeft")
+            expect.append((row, k + 1 if right else 139 - k))
+        if row < 132:
+            b.key("ArrowDown")
+            expect.append((row + 1, 140 if right else 0))
+        if row % 12 == 0:                                     # Enter selects exactly the cross's grid point
+            r_, c_ = expect[-1]
+            b.key("Enter")
+            enters += 1
+            t = b.js("document.getElementById('point-title').textContent")
+            want = f"{38 - r_ * 0.25:.2f}°N, {65 + c_ * 0.25:.2f}°E"
+            if want not in t:
+                fails.append(f"Enter at {r_},{c_}: {t}")
+    log = b.js("window.__log")
+    # positions after each key press, consecutive repeats removed (Enter does not move the cross)
+    path = [(0, 0)]
+    for entry in log:
+        rc = (entry[0], entry[1])
+        if rc != path[-1]:
+            path.append(rc)
+        max_err = max(max_err, entry[2])
+        if entry[2] > 0.5 or not entry[3]:
+            fails.append(f"{rc}: err {entry[2]} px, visible {entry[3]}")
+    if path != expect:
+        k = next((i for i, (a_, b_) in enumerate(zip(path, expect)) if a_ != b_), min(len(path), len(expect)))
+        fails.append(f"path differs from the expected one-step path at step {k}: got {path[k:k+3]}, want {expect[k:k+3]}")
+    seen = set(path)
+    one_step = all(abs(a_[0] - b_[0]) + abs(a_[1] - b_[1]) == 1 for a_, b_ in zip(path, path[1:]))
+    if not one_step:
+        fails.append("some key press moved the cross by more than one grid point")
+    return len(seen), fails, enters, max_err
 
 
 def keys():
     httpd, port = s.serve()
     ok = True
+    base = f"http://127.0.0.1:{port}/index.html?api=off"
     try:
         for (w, h, mobile) in ((1440, 900, False), (390, 844, True)):
             for z in (None, 7):
                 with Browser(w, h, mobile=mobile) as b:
-                    hsh = "mode=24h&fill=rain&t=0" + (f"&z={z}&c=20,80" if z else "")
-                    b.open(f"http://127.0.0.1:{port}/index.html?api=off#{hsh}")
-                    b.js("document.querySelector('#map').focus()")
-                    r = b.js(WALK_JS)
-                    good = r["visited"] == 133 * 141 and r["fails"] == 0 and r["selectFails"] == 0
-                    print(f"{'PASS' if good else 'FAIL'}  walk {w}x{h} zoom {r['zoom']}: visited {r['visited']} grid points, "
-                          f"Enter at {r['selects']} of them, failures {r['fails']} (max position error {r['maxErr']} px)"
-                          + (f"  {r['firstFails']}" if r["fails"] else ""))
+                    b.open(f"{base}#mode=24h&fill=rain&t=0" + (f"&z={z}&c=20,80" if z else ""))
+                    zoom = b.js("window.__rainOutlook.map.getZoom()")
+                    visited, fails, enters, max_err = _walk(b)
+                    good = visited == 133 * 141 and not fails
+                    print(f"{'PASS' if good else 'FAIL'}  real-key walk {w}x{h} zoom {zoom}: {visited} grid points, "
+                          f"Enter at {enters}, failures {len(fails)}, max position error {max_err} px"
+                          + (f"  {fails[:4]}" if fails else ""))
                     ok &= good
-        # real key events (DevTools): arrows, Shift, +/- around the cross, Enter; Leaflet must not pan as well
-        with Browser(1440, 900) as b:
-            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0&z=7&c=13,80.25")
-            b.key("Tab")
+
+        def cross(b):
+            return tuple(b.js("[window.__rainOutlook.cross.row, window.__rainOutlook.cross.col]"))
+
+        def one_step_east(b, label, row, col):
+            """After a selection at (row, col): one real ArrowRight -> exactly (row, col + 1), one grid point east."""
             b.js("document.querySelector('#map').focus()")
-            st = lambda: b.js("(() => { const R = window.__rainOutlook, c = R.map.getCenter(); const r = document.getElementById('crosshair').getBoundingClientRect(); return {row: R.cross.row, col: R.cross.col, z: R.map.getZoom(), cx: +c.lat.toFixed(4), cy: +c.lng.toFixed(4), x: +(r.left + r.width/2).toFixed(1), y: +(r.top + r.height/2).toFixed(1), shown: !document.getElementById('crosshair').hidden, readout: document.getElementById('cross-readout').textContent}; })()")
-            b.key("ArrowRight")                              # first press shows the cross at the start point + 1
-            a0 = st()
-            b.key("ArrowRight"); a1 = st()
-            b.key("ArrowDown", shift=True); a2 = st()
-            res = [("arrow = +1 column, map not panned by Leaflet", a1["col"] == a0["col"] + 1 and a1["row"] == a0["row"]
-                    and (a1["cx"], a1["cy"]) == (a0["cx"], a0["cy"])),
-                   ("Shift+arrow = +10 rows", a2["row"] == a1["row"] + 10 and a2["col"] == a1["col"])]
-            b.key("+"); z1 = st()
-            res.append(("+ zooms in around the cross (same grid point, same screen spot ±1 px)",
-                        z1["z"] > a2["z"] and (z1["row"], z1["col"]) == (a2["row"], a2["col"])
-                        and abs(z1["x"] - a2["x"]) <= 1 and abs(z1["y"] - a2["y"]) <= 1))
-            b.key("-"); z2 = st()
-            res.append(("- zooms out around the cross", z2["z"] < z1["z"] and (z2["row"], z2["col"]) == (a2["row"], a2["col"])
-                        and abs(z2["x"] - a2["x"]) <= 1 and abs(z2["y"] - a2["y"]) <= 1))
+            c0 = b.js("[window.__rainOutlook.map.getCenter().lat, window.__rainOutlook.map.getCenter().lng]")
+            b.key("ArrowRight")
+            got = cross(b)
+            readout = b.js("document.getElementById('cross-readout').textContent")
+            want = (row, col + 1)
+            good = got == want and readout.startswith(f"{38 - row * 0.25:.2f}°N {65 + (col + 1) * 0.25:.2f}°E")
+            print(f"{'PASS' if good else 'FAIL'}  {label}: selected {row},{col} -> ArrowRight -> cross {got} "
+                  f"(want {want}); readout '{readout}'")
+            return good
+
+        for (w, h, mobile) in ((1440, 900, False), (390, 844, True)):
+            for z in (5, 7):
+                with Browser(w, h, mobile=mobile) as b:
+                    b.open(f"{base}#mode=24h&fill=rain&t=0&z={z}&c=15,82")
+                    # keyboard first (moves the cursor somewhere), THEN a real mouse click elsewhere, then an arrow
+                    b.js("document.querySelector('#map').focus()")
+                    for _ in range(3):
+                        b.key("ArrowLeft", shift=True)
+                    m = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })()")
+                    x, y = m[0] + m[2] * 0.62, m[1] + m[3] * 0.38
+                    for t_ in ("mousePressed", "mouseReleased"):
+                        b.call("Input.dispatchMouseEvent", type=t_, x=x, y=y, button="left", clickCount=1)
+                    b.wait("/^-?\\d/.test(document.body.dataset.point || '') || document.body.dataset.point === 'loading'")
+                    pt = b.js("document.getElementById('point-title').textContent")
+                    lat, lon = [float(v[:-2]) for v in pt.replace("Grid point ", "").split(", ")]
+                    row, col = round((38 - lat) / 0.25), round((lon - 65) / 0.25)
+                    ok &= one_step_east(b, f"{w}x{h} z{z} keyboard, then mouse click, then arrow", row, col)
+        with Browser(1440, 900) as b:
+            b.open(f"{base}#mode=24h&fill=rain&t=0&p=13.00,80.25")
+            ok &= one_step_east(b, "p=13.00,80.25 link, then arrow", 100, 61)
+        with Browser(1440, 900) as b:
+            b.open(f"{base}#mode=24h&fill=rain&t=0")
+            b.js("document.getElementById('place-q').focus()")
+            b.type("madras")
+            b.wait("!document.getElementById('place-list').hidden")
             b.key("Enter")
-            b.wait("/^-?\\d/.test(document.body.dataset.point || '')", 20)
-            lat, lon = 38.0 - z2["row"] * 0.25, 65.0 + z2["col"] * 0.25
-            res.append((f"Enter selects the cross's grid point {lat:.2f},{lon:.2f}", b.js("document.body.dataset.point") == f"{lat:.2f},{lon:.2f}"))
-            res.append(("readout shows position + nearest place", z2["readout"].startswith(f"{lat:.2f}°N {lon:.2f}°E · ")))
-            b.screenshot(OUT / "m8_keys.png")
-            for name, good in res:
-                print(f"{'PASS' if good else 'FAIL'}  real keys: {name}")
-                ok &= good
-            print(f"      readout: {z2['readout']!r}")
+            b.wait("(document.getElementById('point-title').textContent || '').includes('13.00')")
+            ok &= one_step_east(b, "search 'madras' (Chennai), then arrow", 100, 61)
+        # +/- with real keys: same grid point, same screen spot
+        with Browser(1440, 900) as b:
+            b.open(f"{base}#mode=24h&fill=rain&t=0&z=6&c=13,80.25")
+            b.js("document.querySelector('#map').focus()")
+            b.key("ArrowRight")
+            st = lambda: b.js("(() => { const R = window.__rainOutlook, r = document.getElementById('crosshair').getBoundingClientRect(); return [R.cross.row, R.cross.col, R.map.getZoom(), r.left + r.width/2, r.top + r.height/2]; })()")
+            a, _ = st(), b.key("+")
+            z1 = st()
+            b.key("-"); z2 = st()
+            good = z1[2] > a[2] > z2[2] - 0.01 and z1[:2] == a[:2] == z2[:2] and abs(z1[3] - a[3]) <= 1 and abs(z1[4] - a[4]) <= 1
+            print(f"{'PASS' if good else 'FAIL'}  real +/-: zoom {a[2]} -> {z1[2]} -> {z2[2]}, cross stays at {a[:2]}, "
+                  f"screen moved {abs(z1[3]-a[3]):.1f},{abs(z1[4]-a[4]):.1f} px")
+            ok &= good
     finally:
         httpd.shutdown()
     print("ALL PASS" if ok else "SOME FAILED")

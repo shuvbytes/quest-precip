@@ -519,6 +519,12 @@ function selectPoint(app, lat, lon, clicked) {
   }
   state.p = [gp.lat, gp.lon];
   app.point = { ...gp, clicked: clicked ? [lat, lon] : null };
+  // ONE current point for mouse and keyboard (user, 14 Nov): every selection (click/tap, p= link, search, Enter) moves
+  // the keyboard cursor here, so the next arrow press starts from the selected grid point.
+  if (app.cursor) {
+    app.cursor.row = gp.row; app.cursor.col = gp.col;
+    if (app.drawCross) app.drawCross();
+  }
   app.marker = L.circleMarker([gp.lat, gp.lon], { pane: "lines", radius: 6, weight: 2, color: "#111",
     fillColor: "#fff", fillOpacity: 0.9, interactive: false }).addTo(map);
   writeHash();
@@ -1078,7 +1084,7 @@ function wire(app) {
     "plus and minus zoom around the cross, Enter shows the forecast at the cross, Escape closes it. " +
     "The position of the cross and the nearest place are read out.");
   const g = m.grid, ch = $("crosshair"), readout = $("cross-readout"), live = $("cross-live");
-  const cur = { row: null, col: null };
+  const cur = app.cursor;                    // shared with selectPoint (click, p= link, search, Enter)
   let lastInput = "pointer", liveTimer = null;
   const crossLatLng = () => [g.lat_north - cur.row * g.dlat, g.lon_west + cur.col * g.dlon];
   const showCross = (on) => { ch.hidden = !on; readout.hidden = !on; };
@@ -1094,7 +1100,7 @@ function wire(app) {
     clampRC();
   }
   function drawCross() {
-    if (cur.row === null) return;
+    if (cur.row === null || ch.hidden) return;
     const size = map.getSize(), pt = map.latLngToContainerPoint(crossLatLng());
     ch.style.left = `${pt.x}px`;
     ch.style.top = `${pt.y}px`;
@@ -1119,10 +1125,12 @@ function wire(app) {
   document.addEventListener("pointerdown", () => { lastInput = "pointer"; showCross(false); }, true);
   mc.addEventListener("focus", () => {
     if (lastInput !== "keyboard") return;
-    if (cur.row === null || !map.getBounds().contains(crossLatLng())) startAt();
+    if (cur.row === null) startAt();
     showCross(true);
+    keepInView();
     drawCross();
   });
+  app.drawCross = drawCross;
   mc.addEventListener("blur", () => showCross(false));
   map.on("move zoom resize", () => { if (!ch.hidden) drawCross(); });
 
@@ -1156,7 +1164,7 @@ function wire(app) {
       drawCross();
     }
   }, true);
-  window.__rainOutlook.cross = cur;          // for dev checks only
+  window.__rainOutlook.cross = cur;          // for dev checks only (same object as app.cursor)
   $("point-close").addEventListener("click", () => closePoint(app));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("point").hidden) closePoint(app); });
 }
@@ -1176,7 +1184,7 @@ async function main() {
   const fill = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds, opts).addTo(map);
   const hatch = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds,
     { pane: "hatch", className: "px", interactive: false });
-  const app = { m, map, fill, hatch, places };
+  const app = { m, map, fill, hatch, places, cursor: { row: null, col: null } };
   window.__rainOutlook = { map };                 // for dev checks (crosshair test); not used by the page
   // Leaflet measures its box once and only re-measures on window resize. The box also changes when the header and
   // footer text arrive, when fonts load, or when panels change height; a stale size put Leaflet's centre 33-49 px
