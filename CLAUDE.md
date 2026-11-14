@@ -655,7 +655,8 @@ visible; header scrolled away; region does not fit). Build after A and B:
 ## Feature 2 — "100 skies" (14 Nov) — `web/app.js` skiesFigure, `m8_checks.py skies`
 - In the point card under the chance chip, compact (user: the first 124 px grid took too much room → ~60 px grid in one row
   with its caption): 10×10 umbrellas (original SVG symbols), open (blue) = at least X mm, closed
-  (grey) = less; open count = the chip's whole % (stored chances are whole percents, so no extra rounding); "< 2 %" → 0 open,
+  (ochre #b07a1e; the first grey #b3b8c0 had 2:1 contrast and vanished at 60 px; ochre 3.7:1 on white, OKLab dE 29 from
+  the blue, 30/25 under deutan/protan simulation; dark grey was rejected at dE 11–14) = less; open count = the chip's whole % (stored chances are whole percents, so no extra rounding); "< 2 %" → 0 open,
   "fewer than 2 in 100". Caption "37 in 100 get ≥ 10 mm in this 24-hour window"; alt text gives both counts; never "members".
 - Check: exact values 0, 1 (both "< 2 %"), 2, 37, 50, 99, 100 % found in the run and opened: open count = chip = panel,
   caption and alt right, icons ≤ 12.5 units on 100 distinct grid spots (first version drew every umbrella full-size on top

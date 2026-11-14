@@ -1062,7 +1062,8 @@ function guideSVG(pose) {
 function skiesFigure(pct, floor, x, windowNote) {
   const below = pct < floor, n = below ? 0 : Math.round(pct);
   const fig = el("figure", "skies");
-  const W = 13, open = "#1f5fa8", shut = "#b3b8c0";
+  // closed = ochre (user, 14 Nov: grey was invisible at 60 px): 3.7:1 on white, dE >= 25 from the blue also for deutan/protan
+  const W = 13, open = "#1f5fa8", shut = "#b07a1e";
   let cells = "";
   for (let i = 0; i < 100; i++) {
     const cx = (i % 10) * W + 6.5, cy = Math.floor(i / 10) * W + 6.5;
@@ -1076,7 +1077,7 @@ function skiesFigure(pct, floor, x, windowNote) {
     <defs>
       <symbol id="u-open" viewBox="0 0 12 12"><path d="M0.4 6.6 Q6 -0.6 11.6 6.6 Q10.2 5.6 8.8 6.6 Q7.4 5.6 6 6.6 Q4.6 5.6 3.2 6.6 Q1.8 5.6 0.4 6.6 Z" fill="${open}"/>
         <path d="M6 6.4 V10.2 q0 1.4 -1.5 1.2" stroke="${open}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
-      <symbol id="u-shut" viewBox="0 0 12 12"><path d="M6 0.8 Q8.2 5 7.4 8.4 H4.6 Q3.8 5 6 0.8 Z" fill="${shut}"/>
+      <symbol id="u-shut" viewBox="0 0 12 12"><path d="M6 0.6 Q9.4 5 8.2 8.6 H3.8 Q2.6 5 6 0.6 Z" fill="${shut}"/>
         <path d="M6 8.2 V10.2 q0 1.4 -1.5 1.2" stroke="${shut}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
     </defs>${cells}</svg>`;
   const cap = el("figcaption", null, `${say} get ≥ ${fmt(x)} mm ${windowNote}`);
