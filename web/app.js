@@ -850,6 +850,94 @@ function renderPointContent(app) {
   document.body.dataset.source = src.kind;
 }
 
+/* ---------- place search (M8 A): a WAI-ARIA combobox over the same local place list (no external service) ----------
+   Matches the start of a name or of any word in it, and old names (Madras, Bombay, ...), ignoring case and accents.
+   Up/Down move, Enter selects (the first match if none is highlighted), Esc closes; mouse/tap works too.
+   Selecting zooms to the place and opens the point panel for its nearest grid point. */
+const fold = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function placeMatches(app, q) {
+  const f = fold(q.trim());
+  if (!f) return [];
+  const [[s, w], [n, e]] = app.m.image.bounds;
+  const out = [];
+  for (const p of app.places) {
+    if (!(p.kind === "city" || p.kind === "capital" || p.kind === "state_capital")) continue;
+    if (!(p.lat >= s && p.lat <= n && p.lon >= w && p.lon <= e)) continue;
+    const name = fold(p.name);
+    let score = name === f ? 0 : name.startsWith(f) ? 1 : name.split(/[\s-]+/).some((x) => x.startsWith(f)) ? 2 : 9;
+    let alias = null;
+    if (score === 9) {
+      alias = p.aliases.find((a) => fold(a).startsWith(f)) || null;
+      if (alias) score = 3;
+    }
+    if (score < 9) out.push({ p, score, alias });
+  }
+  out.sort((a, b) => a.score - b.score || a.p.priority - b.p.priority || b.p.population - a.p.population);
+  return out.slice(0, 8);
+}
+
+function wireSearch(app) {
+  const input = $("place-q"), list = $("place-list"), status = $("place-status");
+  let results = [], active = -1;
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); active = -1; };
+  const highlight = (i) => {
+    active = i;
+    [...list.children].forEach((li, k) => li.setAttribute("aria-selected", String(k === i)));
+    if (i >= 0) input.setAttribute("aria-activedescendant", `place-opt-${i}`);
+    else input.removeAttribute("aria-activedescendant");
+  };
+  const choose = (i) => {
+    const r = results[i];
+    if (!r) return;
+    input.value = r.p.name;
+    close();
+    status.textContent = `${r.p.name}, ${r.p.area} selected; forecast panel opened.`;
+    app.map.setView([r.p.lat, r.p.lon], Math.max(app.map.getZoom(), 7), { animate: false });
+    selectPoint(app, r.p.lat, r.p.lon, true);
+  };
+  const show = () => {
+    results = placeMatches(app, input.value);
+    list.innerHTML = "";
+    if (!input.value.trim()) { close(); status.textContent = ""; return; }
+    if (!results.length) {
+      const li = el("li", "none", "No matching place in the forecast area");
+      li.setAttribute("aria-disabled", "true");
+      list.appendChild(li);
+    }
+    results.forEach((r, i) => {
+      const li = el("li", null, "");
+      li.id = `place-opt-${i}`;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", "false");
+      const b = el("b", null, r.p.name);
+      li.append(b, ` · ${r.p.area}` + (r.alias ? ` (${r.alias})` : ""));
+      li.addEventListener("pointerdown", (e) => { e.preventDefault(); choose(i); });   // keep focus, then select
+      list.appendChild(li);
+    });
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    highlight(-1);
+    status.textContent = results.length ? `${results.length} place${results.length > 1 ? "s" : ""} found` : "No matching place";
+  };
+  input.addEventListener("input", show);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (list.hidden) show();
+      if (!results.length) return;
+      const d = e.key === "ArrowDown" ? 1 : -1;
+      highlight((active + d + results.length) % results.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      choose(active >= 0 ? active : 0);
+    } else if (e.key === "Escape") {
+      if (!list.hidden) { e.stopPropagation(); close(); }
+    }
+  });
+  input.addEventListener("blur", () => setTimeout(close, 150));
+}
+
 /* ---------------- render ---------------- */
 
 function render(app) {
@@ -1073,6 +1161,7 @@ async function main() {
     new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(map.getContainer());
   }
   wire(app);
+  wireSearch(app);
   renderHeader(m);
   renderFooter(m);
   render(app);

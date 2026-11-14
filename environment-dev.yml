@@ -13,5 +13,6 @@ dependencies:
   - pytest
   - pip
   - cartopy          # dev-only: coastlines for check/validation plots (pipeline/m2_check.py etc.)
+  - websocket-client # dev-only: real-clock browser checks (pipeline/cdp.py)
   - pip:
       - ecmwf-opendata

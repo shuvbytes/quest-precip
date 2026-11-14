@@ -30,7 +30,15 @@
     </section>
 
     <aside class="panel" id="panel" aria-label="Map controls and legend">
-      <!-- Point panel: first in the side panel, so on phones (stacked layout) it sits directly below the map. -->
+      <div class="search" id="search">
+        <label for="place-q" class="eyebrow">Find a place</label>
+        <input id="place-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false"
+               aria-controls="place-list" autocomplete="off" spellcheck="false" placeholder="City, e.g. Chennai">
+        <ul id="place-list" role="listbox" aria-label="Matching places" hidden></ul>
+        <p id="place-status" class="sr-only" aria-live="polite"></p>
+      </div>
+
+      <!-- Point panel: right after the place search, so on phones (stacked layout) it sits just below the map. -->
       <section id="point" class="point" hidden aria-live="polite" aria-label="Forecast at the selected point">
         <div class="point-head">
           <h2 id="point-title">Selected point</h2>
