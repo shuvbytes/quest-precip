@@ -5,6 +5,7 @@ Output (git-ignored): site_build/data/
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -284,8 +285,17 @@ def main(hres_path, ens_path, out=OUT_DEFAULT):
     tp, p, base, packs = load(hres_path, ens_path)
     grid, three, w, frames = render_frames(tp, p, packs, out)
     ppath, pentry = write_points(three, w, p, out)
-    mpath, _ = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out, points=pentry)
+    mpath, man = write_manifest(base, grid, frames, tp.attrs["units"], p.attrs["units"], out, points=pentry)
+    # story mode (feature 5): spots chosen from the STORED values (what the panel shows), then added to the manifest
+    from highlights import select
+    places_doc = json.loads((ROOT / "web" / "geo" / "places.json").read_text())
+    places = [dict(zip(places_doc["fields"], r)) for r in places_doc["places"]]
+    man["highlights"] = select(man, read_points(ppath, pentry), places)
+    mpath.write_text(json.dumps(man, indent=1, ensure_ascii=False))
     print(f"wrote {mpath} ({mpath.stat().st_size / 1e3:.1f} kB)")
+    for h in man["highlights"]:
+        print(f"  highlight {h['rule']:12s} {h['lat']:6.2f}N {h['lon']:6.2f}E t={h['t']:3d} x={h['x']} {h['fill']}"
+              + "".join(f" {k}={h[k]}" for k in ("kind", "cells", "city", "dry_lat", "dry_lon") if k in h))
     print(f"wrote {ppath} ({ppath.stat().st_size:,} bytes)")
     site = copy_web(out.parent)
     print(f"copied web/ into {site}")

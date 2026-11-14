@@ -370,3 +370,27 @@ body {
   .swipe-labels span { font-size: 0.66rem; padding: 2px 5px; }
   .swipe-handle { width: 32px; height: 32px; left: -16px; margin-top: -16px; font-size: 15px; }
 }
+
+/* ---------- story mode (feature 5) ---------- */
+.story-open { width: 100%; margin: 0 0 10px; padding: 8px 10px; font: inherit; font-weight: 650; font-size: 0.86rem;
+  color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; text-align: left; }
+.story-open:hover { background: #eef4fc; }
+.story-open:disabled { opacity: .5; cursor: default; }
+.story { position: absolute; z-index: 796; left: 12px; bottom: 12px; width: min(540px, calc(100% - 24px));
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,.2); padding: 10px 12px; }
+.story[hidden] { display: none; }
+.story-step { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--accent); }
+.story-cap { margin: 4px 0 8px; font-size: 0.9rem; line-height: 1.4; }
+.story-btns { display: flex; gap: 8px; }
+.story-btns button { font: inherit; font-weight: 600; font-size: 0.85rem; padding: 6px 12px; min-height: 36px; border-radius: 6px;
+  border: 1px solid var(--line); background: #fff; cursor: pointer; }
+.story-btns #story-next { border-color: var(--accent); background: var(--accent); color: #fff; }
+.story-btns #story-exit { margin-left: auto; }
+.story-btns button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 700px) { .story { left: 8px; bottom: 8px; width: calc(100% - 16px); padding: 8px 10px; }
+  .story-cap { font-size: 0.84rem; } .story-btns button { min-height: 44px; } }
+@media (max-height: 560px) and (min-aspect-ratio: 4/3) {
+  .story { bottom: 6px; padding: 6px 10px; } .story-cap { font-size: 0.78rem; margin: 2px 0 5px; }
+  .story-btns button { min-height: 30px; padding: 3px 10px; font-size: 0.78rem; }
+  .story-open { padding: 4px 8px; margin-bottom: 4px; font-size: 0.8rem; order: 1; }
+}

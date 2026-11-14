@@ -702,6 +702,22 @@ visible; header scrolled away; region does not fit). Build after A and B:
   (desktop, 13 Nov 12z) + `docs/readme/phone_card.png` (live site 14 Nov 00z, 390×844 @2x, card at 15.75N 84.00E: 262.2 mm
   vs 22 % chance of ≥ 50 mm, hatched, guide "models disagree"). Note: the README's numbers are tied to those runs.
 
+## Feature 5 — story mode "What's interesting today" (14 Nov) — `pipeline/highlights.py`, `web/app.js` storyGo/renderStory
+- Spots chosen at build time from the STORED values (points.bin) into `manifest.highlights` (rules in highlights.py docstring,
+  approved with tweaks: disagreement at X ≥ 10 mm; contrast wet point in a ≥ 3-cell group of ≥ 20 mm with a < 1 mm cell within
+  2 grid points; ≥ 300 km apart). Run 14 Nov 00z: heaviest 13.50N 86.00E (713.4 mm, +72 h), disagreement 21.50N 89.25E (117-cell
+  wetter group at ≥ 50 mm), contrast 15.25N 82.75E (75.0 mm, < 1 mm 77 km SW), city Chennai (33 % ≥ 10 mm), confident 5.25N 87.25E
+  (100 % ≥ 50 mm). `tests/test_highlights.py` checks every rule independently.
+- Page: "What's interesting today ▸" in the side panel; story bar over the map (Back / Next or Finish / Exit, Esc); each step
+  sets 24 h mode, window, threshold, layer, flies there (no animation with reduced motion) and selects the point; the card is
+  hidden during the story; captions built from the selected point's values with the panel's formatting, never calling a
+  model wrong.
+- Check `m8_checks.py story` (real clicks/keys): all 5 steps + Back: state, point, in view, caption mm/% == panel texts;
+  keyboard Enter through to Finish; Esc restores the card; phone portrait/landscape bar inside the map. (A first version
+  required the map to be centred on the point; a spot 0.25° from the region edge cannot be centred, so "in view" is checked.)
+- Test harness note: `m8_checks.py card` timed out twice on page load (once on 14 Nov afternoon, once now) and passed on
+  rerun both times: headless Chrome hiccup, not a page error.
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)

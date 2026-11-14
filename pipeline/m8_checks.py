@@ -712,5 +712,81 @@ def swipe():
     return ok
 
 
+def story():
+    """Feature 5: each step's state, flight, selected point and caption numbers == panel; keyboard; Esc; phones."""
+    import json
+    import time
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    hs = m["highlights"]
+    httpd, port = s.serve()
+    ok = True
+    res = []
+    def click(b, sel):
+        x, y = b.js(f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }})()")
+        for t_ in ("mousePressed", "mouseReleased"):
+            b.call("Input.dispatchMouseEvent", type=t_, x=x, y=y, button="left", clickCount=1)
+    def check_step(b, i, label):
+        h = hs[i]
+        b.wait(f"document.body.dataset.story === '{i}' && !/^…$/.test(document.getElementById('story-cap').textContent) && !!document.querySelector('[data-field=story-mm], [data-field=story-pct]')", 30)
+        time.sleep(1.4)                                         # let the flight end
+        r = b.js("""(() => { const f = (n) => (document.querySelector(`[data-field="${n}"]`) || {}).textContent || null;
+          const map = window.__rainOutlook.map, c = map.getCenter(), sz = map.getSize();
+          const pp = map.latLngToContainerPoint([+document.body.dataset.point.split(',')[0], +document.body.dataset.point.split(',')[1]]);
+          const inView = pp.x > 30 && pp.y > 30 && pp.x < sz.x - 30 && pp.y < sz.y - 30;   // near the region edge the map cannot centre it
+          return {point: document.body.dataset.point, x: document.getElementById('x').value, t: document.getElementById('t-label').textContent,
+            mode: document.querySelector('[data-mode][aria-pressed=true]').dataset.mode, fill: document.querySelector('[data-fill][aria-pressed=true]').dataset.fill,
+            mm: f('story-mm'), pct: f('story-pct'), panelMm: f('sum-24h'), panelPct: f('sum-ens'), cap: document.getElementById('story-cap').textContent,
+            step: document.getElementById('story-step').textContent, lat: c.lat, lon: c.lng, inView, card: document.getElementById('pcard').hidden}; })()""")
+        want_t = m["products"]["hres_24h"]["frames"][h["window"]]["label_ist"]
+        good = (r["point"] == f"{h['lat']:.2f},{h['lon']:.2f}" and r["x"] == h["x"] and r["t"] == want_t and r["mode"] == "24h"
+                and r["fill"] == h["fill"] and r["inView"] and r["card"]
+                and (r["mm"] is None or r["panelMm"].endswith(": " + r["mm"])) and (r["pct"] is None or r["panelPct"].endswith(": " + r["pct"]))
+                and not any(w in r["cap"].lower() for w in ("wrong", "error", "incorrect", "mistake")))
+        res.append((f"{label} step {i + 1} ({h['rule']}): point {r['point']}, x {r['x']}, {r['fill']}, point in view; caption numbers "
+                    f"{r['mm']} / {r['pct']} = panel; '{r['cap'][:110]}…'", good))
+    try:
+        with Browser(1440, 900) as b:
+            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=3h&t=33")
+            click(b, "#story-open")
+            check_step(b, 0, "desktop")
+            b.screenshot(s.OUT / "story_step1.png")
+            for i in range(1, len(hs)):
+                click(b, "#story-next")
+                check_step(b, i, "desktop")
+                b.screenshot(s.OUT / f"story_step{i + 1}.png")
+            click(b, "#story-back")
+            check_step(b, len(hs) - 2, "Back:")
+            b.key("Escape")
+            st = b.js("[document.getElementById('story').hidden, document.body.dataset.story, !document.getElementById('pcard').hidden]")
+            res.append(("Esc leaves the story; the point card comes back", st[0] and st[1] == "" and st[2]))
+            # keyboard only: Tab-focus the button, Enter, Enter... until Finish
+            b.js("document.getElementById('story-open').focus()")
+            b.key("Enter")
+            check_step(b, 0, "keyboard")
+            for i in range(1, len(hs)):
+                b.key("Enter")                                     # focus sits on Next after opening
+                check_step(b, i, "keyboard")
+            b.key("Enter")                                         # Finish
+            res.append(("keyboard: Enter on Next steps through, Finish closes", b.js("document.getElementById('story').hidden")))
+        for name, w, h_ in (("portrait", 390, 844), ("landscape", 844, 390)):
+            with Browser(w, h_, mobile=True) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")
+                b.js("document.getElementById('story-open').scrollIntoView({block: 'center'})")
+                click(b, "#story-open")
+                check_step(b, 0, name)
+                b.js("document.getElementById('map').scrollIntoView({block: 'start'})")
+                time.sleep(0.3)
+                inside = b.js("(() => { const a = document.getElementById('story').getBoundingClientRect(), m = document.getElementById('map').getBoundingClientRect(); return [a.left >= m.left - 1, a.right <= m.right + 1, a.bottom <= m.bottom + 1, a.top >= m.top, document.documentElement.scrollWidth > innerWidth, Math.round(a.height)]; })()")
+                b.screenshot(s.OUT / f"story_{name}.png")
+                res.append((f"{name}: story bar inside the map ({inside[5]} px tall), no sideways scroll", all(inside[:4]) and not inside[4]))
+        for name, good in res:
+            print(f"{'PASS' if good else 'FAIL'}  {name}")
+            ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies, "swipe": swipe}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies, "swipe": swipe, "story": story}[sys.argv[1]]() else 1)

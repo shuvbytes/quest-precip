@@ -969,6 +969,7 @@ function renderPointContent(app) {
   document.body.dataset.point = `${point.lat.toFixed(2)},${point.lon.toFixed(2)}`;
   document.body.dataset.source = src.kind;
   renderCard(app);
+  renderStory(app);
 }
 
 /* ---------- place search (M8 A): a WAI-ARIA combobox over the same local place list (no external service) ----------
@@ -1143,11 +1144,83 @@ function skiesFigure(pct, floor, x, windowNote) {
   return fig;
 }
 
+/* ---------- story mode (feature 5): "What's interesting today" ----------
+   The spots come from manifest.highlights (pipeline/highlights.py, rules in its docstring). Each step sets the mode,
+   window, threshold and layer, flies the map there and selects the point; the caption is built from the selected point's
+   values with the panel's own formatting, so its numbers are the panel's numbers. Captions never call a model wrong. */
+const STORY_TITLE = { heaviest: "Heaviest rain", disagreement: "Biggest disagreement", contrast: "Sharpest wet–dry contrast",
+  city: "A major city", confident: "Most confident heavy rain" };
+
+function storyGo(app, i) {
+  const list = app.m.highlights || [];
+  if (!list.length) return;
+  app.story = { i: Math.max(0, Math.min(list.length - 1, i)) };
+  const h = list[app.story.i];
+  if (app.pause) app.pause();
+  Object.assign(state, { mode: "24h", fill: h.fill, x: h.x, hatch: h.hatch, cmp: false, t: h.t });
+  render(app);
+  const z = 6.5;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) app.map.setView([h.lat, h.lon], z, { animate: false });
+  else app.map.flyTo([h.lat, h.lon], z, { duration: 1.2 });
+  $("story").hidden = false;
+  $("story-step").textContent = `${STORY_TITLE[h.rule]} · step ${app.story.i + 1} of ${list.length}`;
+  $("story-cap").textContent = "…";
+  $("story-back").disabled = app.story.i === 0;
+  $("story-next").textContent = app.story.i === list.length - 1 ? "Finish" : "Next ›";
+  document.body.dataset.story = String(app.story.i);
+  selectPoint(app, h.lat, h.lon, false);      // the caption is filled once this point's values are in (renderStory)
+}
+
+function storyExit(app) {
+  if (!app.story) return;
+  app.story = null;
+  $("story").hidden = true;
+  document.body.dataset.story = "";
+  app.cardClosed = false;
+  if (app.point && app.src) renderCard(app);
+  $("story-open").focus({ preventScroll: true });
+}
+
+function renderStory(app) {
+  if (!app.story || !app.src || !app.point) return;
+  const { m, src } = app, h = m.highlights[app.story.i];
+  if (app.point.row !== h.row || app.point.col !== h.col) return;
+  const P = m.products, k = h.window, f = P.hres_24h.frames[k];
+  const kx = P.ens_prob.thresholds_mm.map(thrKey).indexOf(h.x), ef = P.ens_prob.frames_by_threshold[h.x][k];
+  const mm = fmtMm(src.val("hres_24h", [k]), f.lowest_drawn), pct = fmtPct(src.val("ens_prob", [kx, k]), ef.lowest_drawn);
+  const near = nearText(app.places || [], h.lat, h.lon), when = f.label_ist;
+  const cap = $("story-cap");
+  cap.innerHTML = "";
+  const t = (s) => document.createTextNode(s);
+  const num = (s, field) => { const b = el("b", null, s); b.dataset.field = field; return b; };
+  const x = fmt(h.x);
+  if (h.rule === "heaviest") {
+    cap.append(t("The single run's largest 24-hour total: "), num(mm, "story-mm"), t(`, ${when}, ${near.charAt(0).toLowerCase() + near.slice(1)}. The ensemble gives a `),
+      num(pct, "story-pct"), t(` chance of ≥ ${x} mm here.`));
+  } else if (h.rule === "disagreement") {
+    const why = h.kind === "wetter"
+      ? `the single run gives ≥ ${x} mm but the ensemble's chance is under ${P.disagreement.rule.p_unlikely} %`
+      : `the ensemble's chance of ≥ ${x} mm is ${P.disagreement.rule.p_likely} % or more but the single run stays below it`;
+    cap.append(t(`The largest marked group: ${h.cells} grid points where ${why}. Here: `), num(mm, "story-mm"),
+      t(" from the single run and a "), num(pct, "story-pct"), t(` chance of ≥ ${x} mm from the ensemble, ${when}.`));
+  } else if (h.rule === "contrast") {
+    const d = Math.round(distanceKm(h.lat, h.lon, h.dry_lat, h.dry_lon));
+    const dir = COMPASS[Math.round(bearingDeg(h.lat, h.lon, h.dry_lat, h.dry_lon) / 45) % 8];
+    cap.append(t("Rain changes fast here: "), num(mm, "story-mm"), t(` in 24 hours at this point, under 1 mm ${d} km to the ${dir} (single run), ${when}.`));
+  } else if (h.rule === "city") {
+    cap.append(t(`${h.city}: the ensemble gives a `), num(pct, "story-pct"), t(` chance of ≥ ${x} mm, ${when}; the single run gives `),
+      num(mm, "story-mm"), t("."));
+  } else {
+    cap.append(t("The ensemble's most confident heavy rain: a "), num(pct, "story-pct"), t(` chance of ≥ ${x} mm, ${when}, ${near.charAt(0).toLowerCase() + near.slice(1)}; the single run gives `),
+      num(mm, "story-mm"), t("."));
+  }
+}
+
 function guideOn() { try { return localStorage.getItem("guide") !== "off"; } catch (e) { return true; } }
 
 function renderCard(app) {
   const card = $("pcard"), { m, src, point } = app;
-  if (!src || !point || app.cardClosed) { card.hidden = true; return; }
+  if (!src || !point || app.cardClosed || app.story) { card.hidden = true; return; }   // the story caption replaces the card
   const Pr = m.products, idx = point.row * m.grid.nlon + point.col;
   const k24 = frameIndex(Pr.hres_24h.frames), f24 = Pr.hres_24h.frames[k24];
   const keys = Pr.ens_prob.thresholds_mm.map(thrKey), kx = keys.indexOf(state.x);
@@ -1502,8 +1575,18 @@ function wire(app) {
   }, true);
   window.__rainOutlook.cross = cur;          // for dev checks only (same object as app.cursor)
   $("point-close").addEventListener("click", () => closePoint(app));
+  const sb = $("story-open");
+  sb.disabled = !(m.highlights && m.highlights.length);
+  sb.addEventListener("click", () => { storyGo(app, 0); $("story-next").focus({ preventScroll: true }); });
+  $("story-next").addEventListener("click", () => {
+    if (app.story.i >= m.highlights.length - 1) storyExit(app); else storyGo(app, app.story.i + 1);
+  });
+  $("story-back").addEventListener("click", () => storyGo(app, app.story.i - 1));
+  $("story-exit").addEventListener("click", () => storyExit(app));
+  L.DomEvent.disableClickPropagation($("story"));
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (app.story) { storyExit(app); return; }                 // Esc leaves the story first
     if (!$("pcard").hidden) { closeCard(app); return; }       // first Esc: the card; second: the panel
     if (!$("point").hidden) closePoint(app);
   });

@@ -36,6 +36,16 @@
         <button type="button" class="swipe-handle" id="swipe-handle" role="slider" aria-valuemin="5" aria-valuemax="95"
                 aria-valuenow="50" aria-label="Compare divider: single run on the left, ensemble on the right">⇔</button>
       </div>
+      <!-- Story mode (feature 5): steps through spots chosen by pipeline/highlights.py -->
+      <section class="story" id="story" aria-label="What's interesting today" hidden>
+        <p class="story-step" id="story-step"></p>
+        <p class="story-cap" id="story-cap" aria-live="polite"></p>
+        <div class="story-btns">
+          <button type="button" id="story-back">‹ Back</button>
+          <button type="button" id="story-next">Next ›</button>
+          <button type="button" id="story-exit">Exit</button>
+        </div>
+      </section>
       <div class="swipe-labels" id="swipe-labels" hidden>
         <span class="sl-left" id="swipe-left"></span><span class="sl-right" id="swipe-right"></span>
       </div>
@@ -54,6 +64,8 @@
         <ul id="place-list" role="listbox" aria-label="Matching places" hidden></ul>
         <p id="place-status" class="sr-only" aria-live="polite"></p>
       </div>
+
+      <button type="button" class="story-open" id="story-open">What's interesting today ▸</button>
 
       <!-- Point panel: right after the place search, so on phones (stacked layout) it sits just below the map. -->
       <section id="point" class="point" hidden aria-live="polite" aria-label="Forecast at the selected point">
