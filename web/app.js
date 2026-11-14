@@ -49,6 +49,7 @@ async function getJSON(url) {
 function makeMap(m) {
   const map = L.map("map", {
     zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 3, maxZoom: 9,   // 3: a phone needs ~3.9 to fit the region
+    keyboardPanDelta: 0,                    // arrows move the crosshair by grid points instead (M8 B, wire())
     attributionControl: false,              // full attribution is in the footer
   });
   // Draw order (bottom -> top): land fill, rain/chance image, disagreement hatch, coast + India boundary lines.
@@ -1068,101 +1069,94 @@ function wire(app) {
   });
   map.on("zoomend", rerender);
   map.on("click", (e) => selectPoint(app, e.latlng.lat, e.latlng.lng, true));
-  // Keyboard (user decision, 13 Nov): Tab to the map -> a centre crosshair shows; arrows pan and +/- zoom (Leaflet);
-  // Enter or Space selects the grid point under the crosshair; Esc closes the panel.
+  // Keyboard (M8 B, user 14 Nov): the crosshair stands on a GRID POINT. Arrows move it one grid point (0.25 deg),
+  // Shift+arrow ten; the map pans just enough to keep it in view; +/- zoom around it; Enter selects exactly that grid
+  // point; a readout beside it gives its position and nearest place. Shown only for keyboard use (13 Nov).
   const mc = map.getContainer();
   mc.setAttribute("aria-label",
-    "Forecast map. Arrow keys move the map (near the edges, the cross moves instead), Shift with an arrow moves further, " +
-    "Alt or Option with an arrow moves the cross to the next grid point, " +
-    "plus and minus zoom, Enter shows the forecast at the cross, Escape closes it.");
-  // Show the crosshair only for KEYBOARD use (user, 13 Nov): a click also focuses the map, so remember how the user
-  // last interacted. Pointer (mouse/touch/pen) hides it at once; a key press while the map has focus shows it.
-  let lastInput = "pointer";
-  const cross = (on) => { $("crosshair").hidden = !on; };
+    "Forecast map. Arrow keys move the cross one grid point (0.25 degrees), Shift with an arrow moves ten, " +
+    "plus and minus zoom around the cross, Enter shows the forecast at the cross, Escape closes it. " +
+    "The position of the cross and the nearest place are read out.");
+  const g = m.grid, ch = $("crosshair"), readout = $("cross-readout"), live = $("cross-live");
+  const cur = { row: null, col: null };
+  let lastInput = "pointer", liveTimer = null;
+  const crossLatLng = () => [g.lat_north - cur.row * g.dlat, g.lon_west + cur.col * g.dlon];
+  const showCross = (on) => { ch.hidden = !on; readout.hidden = !on; };
+  const clampRC = () => {
+    cur.row = Math.min(g.nlat - 1, Math.max(0, cur.row));
+    cur.col = Math.min(g.nlon - 1, Math.max(0, cur.col));
+  };
+  function startAt() {                       // the selected point, else the grid point nearest the map centre
+    if (app.point) { cur.row = app.point.row; cur.col = app.point.col; return; }
+    const c = map.getCenter();
+    cur.row = Math.round((g.lat_north - c.lat) / g.dlat);
+    cur.col = Math.round((c.lng - g.lon_west) / g.dlon);
+    clampRC();
+  }
+  function drawCross() {
+    if (cur.row === null) return;
+    const size = map.getSize(), pt = map.latLngToContainerPoint(crossLatLng());
+    ch.style.left = `${pt.x}px`;
+    ch.style.top = `${pt.y}px`;
+    const [lat, lon] = crossLatLng();
+    readout.textContent = `${fmtLat(lat)} ${fmtLon(lon)} · ${nearText(app.places || [], lat, lon)}`;
+    // readout beside the cross, flipped to the other side near the right/bottom edge
+    const rw = readout.offsetWidth || 220, flipX = pt.x + 18 + rw > size.x - 4, flipY = pt.y + 40 > size.y - 4;
+    readout.style.left = `${flipX ? pt.x - 18 - rw : pt.x + 18}px`;
+    readout.style.top = `${flipY ? pt.y - 34 : pt.y + 14}px`;
+    mc.dataset.cross = `${cur.row},${cur.col}`;              // for checks
+    clearTimeout(liveTimer);                                  // screen readers: announce once the cross rests
+    liveTimer = setTimeout(() => { live.textContent = readout.textContent; }, 300);
+  }
+  function keepInView() {                    // pan just enough that the cross stays inside a margin of the map box
+    const size = map.getSize(), pt = map.latLngToContainerPoint(crossLatLng());
+    const mx = Math.min(48, size.x / 4), my = Math.min(48, size.y / 4);
+    const dx = pt.x < mx ? pt.x - mx : pt.x > size.x - mx ? pt.x - (size.x - mx) : 0;
+    const dy = pt.y < my ? pt.y - my : pt.y > size.y - my ? pt.y - (size.y - my) : 0;
+    if (dx || dy) map.panBy([dx, dy], { animate: false });   // Leaflet then keeps the view inside its max bounds
+  }
   document.addEventListener("keydown", () => { lastInput = "keyboard"; }, true);
-  document.addEventListener("pointerdown", () => { lastInput = "pointer"; cross(false); off.x = 0; off.y = 0; }, true);
-  mc.addEventListener("focus", () => { cross(lastInput === "keyboard"); placeCross(); });
-  mc.addEventListener("blur", () => cross(false));
-
-  /* Arrow keys (user, 13 Nov): pan the map; where the map cannot pan further (its pan limit near the region's edges),
-     move the CROSSHAIR instead, so every grid point in the forecast area can be reached by keyboard. Moving back
-     first returns the crosshair toward the centre, then pans again. The crosshair never leaves the forecast area.
-     Leaflet's own arrow handling is bypassed (stopPropagation) so the two cannot fight. */
-  const off = { x: 0, y: 0 };                       // crosshair offset from the map centre, CSS px
-  const STEP = 80;                                  // Leaflet's default keyboard pan step
-  function placeCross() {
-    const size = map.getSize(), b = m.image.bounds;
-    const nw = map.latLngToContainerPoint([b[1][0], b[0][1]]), se = map.latLngToContainerPoint([b[0][0], b[1][1]]);
-    const cx = size.x / 2, cy = size.y / 2, pad = 2;
-    // keep the crosshair inside the visible map AND inside the forecast area (image bounds = cell edges)
-    const minX = Math.max(pad, nw.x + 1) - cx, maxX = Math.min(size.x - pad, se.x - 1) - cx;
-    const minY = Math.max(pad, nw.y + 1) - cy, maxY = Math.min(size.y - pad, se.y - 1) - cy;
-    off.x = Math.min(Math.max(off.x, minX), Math.max(minX, maxX));
-    off.y = Math.min(Math.max(off.y, minY), Math.max(minY, maxY));
-    $("crosshair").style.transform = `translate(${off.x}px, ${off.y}px)`;
-  }
-  function moveAxis(axis, d) {
-    // 1) if the crosshair is off-centre and we move back toward the centre, move the crosshair first
-    if (off[axis] !== 0 && Math.sign(d) === -Math.sign(off[axis])) {
-      const back = Math.sign(d) * Math.min(Math.abs(d), Math.abs(off[axis]));
-      off[axis] += back; d -= back;
-    }
-    if (d === 0) return;
-    // 2) pan the map as far as its limit allows (Leaflet's own limit function, as its keyboard handler uses) ...
-    const want = axis === "x" ? L.point(d, 0) : L.point(0, d);
-    const lim = map.options.maxBounds ? map._limitOffset(want, map.options.maxBounds) : want;
-    let pan = axis === "x" ? lim.x : lim.y;
-    // ... but never so far that the forecast area's edge passes the crosshair. (The pan limit extends ~5 deg beyond
-    // the data, more than a phone screen shows at zoom 7, so the data could otherwise leave the screen; 13 Nov.)
-    // panBy(+d) moves the content by -d px, so after the pan the edge sits at (edge - pan).
-    const b = m.image.bounds, size = map.getSize();
-    const nw = map.latLngToContainerPoint([b[1][0], b[0][1]]), se = map.latLngToContainerPoint([b[0][0], b[1][1]]);
-    const c = (axis === "x" ? size.x : size.y) / 2 + off[axis];             // crosshair position on this axis
-    const lo = (axis === "x" ? nw.x : nw.y) - c + 1;                      // pan >= lo keeps the near edge before it
-    const hi = (axis === "x" ? se.x : se.y) - c - 1;                      // pan <= hi keeps the far edge after it
-    pan = d > 0 ? Math.max(0, Math.min(pan, hi)) : Math.min(0, Math.max(pan, lo));
-    if (pan) map.panBy(axis === "x" ? L.point(pan, 0) : L.point(0, pan), { animate: false });
-    // 3) the part the map could not move, the crosshair moves instead (placeCross keeps it inside the area)
-    off[axis] += d - pan;
-  }
-  map.on("zoomend resize", placeCross);
-  const ARROWS = { ArrowLeft: ["x", -1], ArrowRight: ["x", 1], ArrowUp: ["y", -1], ArrowDown: ["y", 1] };
-
-  mc.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") cross(true);                 // keyboard use on the focused map
-    if (ARROWS[e.key] && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();                            // Leaflet must not pan as well
-      map.stop();
-      const [axis, sign] = ARROWS[e.key];
-      if (e.altKey) {
-        // Alt/Option + arrow: exactly to the NEXT grid point in that direction (80 px can jump several 0.25 deg cells),
-        // so every grid point in the forecast area can be selected by keyboard at any zoom.
-        const g = m.grid, size = map.getSize();
-        const cp = L.point(size.x / 2 + off.x, size.y / 2 + off.y), here = map.containerPointToLatLng(cp);
-        let r = Math.round((g.lat_north - here.lat) / g.dlat), c = Math.round((here.lng - g.lon_west) / g.dlon);
-        if (axis === "x") c += sign; else r += sign;
-        r = Math.min(g.nlat - 1, Math.max(0, r)); c = Math.min(g.nlon - 1, Math.max(0, c));
-        const tp = map.latLngToContainerPoint([g.lat_north - r * g.dlat, g.lon_west + c * g.dlon]);
-        moveAxis("x", tp.x - cp.x);
-        moveAxis("y", tp.y - cp.y);
-      } else {
-        moveAxis(axis, sign * STEP * (e.shiftKey ? 3 : 1));
-      }
-      placeCross();
-      return;
-    }
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      // Exactly the position under the crosshair: take its on-screen centre and convert that pixel to a location
-      // (not map.getCenter(), which assumes the crosshair sits at Leaflet's idea of the centre).
-      map.stop();                                     // finish no pan animation: the map stays exactly where it is now
-      map.invalidateSize({ pan: false });
-      const cr = $("crosshair").getBoundingClientRect(), mr = mc.getBoundingClientRect();
-      const ll = map.containerPointToLatLng([cr.left + cr.width / 2 - mr.left, cr.top + cr.height / 2 - mr.top]);
-      selectPoint(app, ll.lat, ll.lng, true);
-    }
+  document.addEventListener("pointerdown", () => { lastInput = "pointer"; showCross(false); }, true);
+  mc.addEventListener("focus", () => {
+    if (lastInput !== "keyboard") return;
+    if (cur.row === null || !map.getBounds().contains(crossLatLng())) startAt();
+    showCross(true);
+    drawCross();
   });
+  mc.addEventListener("blur", () => showCross(false));
+  map.on("move zoom resize", () => { if (!ch.hidden) drawCross(); });
+
+  const ARROWS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+  const ZOOM_KEYS = { "+": 1, "=": 1, "-": -1, "_": -1 };
+  // capture phase + stopImmediatePropagation: this runs before Leaflet's own keyboard handler on the same element,
+  // which must not pan or zoom as well
+  mc.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const arrow = ARROWS[e.key], zoom = ZOOM_KEYS[e.key];
+    if (!arrow && !zoom && e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    map.stop();
+    if (cur.row === null) startAt();
+    showCross(true);
+    if (arrow) {
+      const n = e.shiftKey ? 10 : 1;
+      cur.row += arrow[0] * n; cur.col += arrow[1] * n;
+      clampRC();
+      keepInView();
+      drawCross();
+    } else if (zoom) {
+      const z = Math.min(map.getMaxZoom(), Math.max(map.getMinZoom(), map.getZoom() + zoom * map.options.zoomDelta));
+      map.setZoomAround(L.latLng(crossLatLng()), z, { animate: false });   // the cross keeps its place on screen
+      keepInView();
+      drawCross();
+    } else {
+      const [lat, lon] = crossLatLng();       // exactly this grid point: no pixel-to-location conversion
+      selectPoint(app, lat, lon, true);
+      drawCross();
+    }
+  }, true);
+  window.__rainOutlook.cross = cur;          // for dev checks only
   $("point-close").addEventListener("click", () => closePoint(app));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("point").hidden) closePoint(app); });
 }
