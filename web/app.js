@@ -3,6 +3,8 @@
 "use strict";
 
 const DATA = "data/";
+// Small screens (M8 D): phones in portrait (narrow) or landscape / short windows. Same query as in style.css.
+const SMALL = window.matchMedia("(max-width: 700px), (max-height: 560px)");
 const $ = (id) => document.getElementById(id);
 
 function setStatus(s) { document.body.dataset.status = s; }
@@ -255,7 +257,10 @@ function renderHeader(m) {
   const run = parseUTC(m.run.utc);
   const runAgeH = (Date.now() - run) / 3.6e6;
   const runLine = $("run-line");
-  runLine.textContent = `Forecast run: ${m.run.ist} (${m.run.utc.slice(11, 16)} UTC, ${m.run.utc.slice(0, 10)}) · issued ${ago(run)}`;
+  // long text for normal screens, short one for short screens (one header line; style.css chooses)
+  runLine.innerHTML = "";
+  runLine.append(el("span", "long", `Forecast run: ${m.run.ist} (${m.run.utc.slice(11, 16)} UTC, ${m.run.utc.slice(0, 10)}) · issued ${ago(run)}`),
+    el("span", "short", `Run ${m.run.ist} · issued ${ago(run)}`));
   // Amber when the run is more than 30 h old (user, 13 Nov): a 12z run is routinely ~19 h old before the
   // next 00z is published, so a lower threshold would warn in normal operation.
   if (runAgeH > 30) {
@@ -265,7 +270,9 @@ function renderHeader(m) {
     runLine.appendChild(b);
   }
   const gen = parseUTC(m.generated_utc);
-  $("updated-line").textContent = `Last updated: ${istLabel(gen)} (${ago(gen)})`;
+  const up = $("updated-line");
+  up.innerHTML = "";
+  up.append(el("span", "long", `Last updated: ${istLabel(gen)} (${ago(gen)})`), el("span", "short", `updated ${ago(gen)}`));
 }
 
 /* ---------------- legend & footer (bins, colours, units, notes all from the manifest) ---------------- */
@@ -354,7 +361,23 @@ function renderFooter(m) {
     by <a href="http://datameet.org/" rel="noopener">DataMeet India community</a> (CC-0 per the dataset's README), drawn as per the Survey of India official boundary.
     State boundaries: <a href="https://github.com/datameet/maps/tree/master/States" rel="noopener">State boundaries</a> by DataMeet India community (CC BY 4.0; internal lines only).
     Land, coastline and place names: Natural Earth (public domain). No third-party map tiles.`;
-  foot.append(p1, p2);
+  // Small screens (M8 D): one short attribution line + "About & sources", which opens the full text as a bottom sheet.
+  // Large screens: the full text, as before (the details element is kept open and its summary hidden).
+  const about = el("details", "about");
+  about.id = "about";
+  const sum = document.createElement("summary");
+  sum.append(el("span", "about-short", "© ECMWF Open Data (CC BY 4.0, modified) · DataMeet · Natural Earth"),
+    el("span", "about-link", "About & sources"));
+  const body = el("div", "about-body");
+  const close = el("button", "about-close", "Close");
+  close.type = "button";
+  close.addEventListener("click", () => { about.open = false; sum.focus(); });
+  body.append(p1, p2, close);
+  about.append(sum, body);
+  foot.append(about);
+  const apply = () => { about.open = !SMALL.matches; };
+  apply();
+  SMALL.addEventListener("change", apply);
 }
 
 /* ---------------- point panel (M6) ---------------- */
@@ -529,7 +552,7 @@ function selectPoint(app, lat, lon, clicked) {
     fillColor: "#fff", fillOpacity: 0.9, interactive: false }).addTo(map);
   writeHash();
   renderPoint(app);
-  if (clicked && window.matchMedia("(max-width: 700px)").matches) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (clicked && SMALL.matches) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function closePoint(app) {
@@ -998,9 +1021,9 @@ function render(app) {
   else if (map.hasLayer(hatch)) map.removeLayer(hatch);
 
   // Zoom note: on load the region is fitted (below zoom 6), so the note is visible straight away.
-  const note = $("zoom-note");
-  note.textContent = m.products.disagreement.zoom_note;
-  note.hidden = !(state.mode === "24h" && state.hatch && low);
+  const note = $("zoom-note"), noteIn = $("zoom-note-inline");
+  note.textContent = noteIn.textContent = m.products.disagreement.zoom_note;
+  note.hidden = noteIn.hidden = !(state.mode === "24h" && state.hatch && low);
 
   // Controls reflect state
   document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
@@ -1189,8 +1212,17 @@ async function main() {
   // Leaflet measures its box once and only re-measures on window resize. The box also changes when the header and
   // footer text arrive, when fonts load, or when panels change height; a stale size put Leaflet's centre 33-49 px
   // below the crosshair (13 Nov). Tell Leaflet every time the box actually changes.
+  // Until the user moves or zooms the map (or a shared link set the view), keep the whole region fitted when the
+  // map box changes size: the first fit happens before the header text arrives, so on short screens (M8 D) the
+  // final, shorter map no longer fitted the region.
+  let userMoved = !!view;
+  ["mousedown", "touchstart", "wheel", "keydown"].forEach((ev) =>
+    map.getContainer().addEventListener(ev, () => { userMoved = true; }, { capture: true, passive: true }));
   if ("ResizeObserver" in window) {
-    new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(map.getContainer());
+    new ResizeObserver(() => {
+      map.invalidateSize({ pan: false });
+      if (!userMoved) map.fitBounds(m.image.bounds, { animate: false });
+    }).observe(map.getContainer());
   }
   wire(app);
   wireSearch(app);

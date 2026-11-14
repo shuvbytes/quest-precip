@@ -203,5 +203,106 @@ def keys():
     return ok
 
 
+LAYOUT_JS = r"""
+(() => {
+  const vw = innerWidth, vh = innerHeight, de = document.documentElement;
+  const R = (sel) => { const e = typeof sel === 'string' ? document.querySelector(sel) : sel;
+    if (!e || e.offsetParent === null && getComputedStyle(e).position !== 'fixed') return null;
+    const r = e.getBoundingClientRect(); return r.width && r.height ? [r.left, r.top, r.right, r.bottom] : null; };
+  // inside the viewport AND at least 30 px tall (a squeezed 2 px control is not usable)
+  const inView = (r, minH = 0) => r && r[0] >= 0 && r[1] >= 0 && r[2] <= vw + 0.5 && r[3] <= vh + 0.5 && r[3] - r[1] >= minH;
+  const overlap = (a, b) => a && b && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const map = window.__rainOutlook.map, mapR = R('#map');
+  const b = map.getBounds(), img = [[4.875, 64.875], [38.125, 100.125]];
+  const fits = b.getSouth() <= img[0][0] + 0.3 && b.getNorth() >= img[1][0] - 0.3 && b.getWest() <= img[0][1] + 0.3 && b.getEast() >= img[1][1] - 0.3;
+  const showing = R('#showing span'), zoomCtl = R('.leaflet-control-zoom');
+  const edges = [...document.querySelectorAll('.edge-label span')].map(R).filter(Boolean);
+  const noteOnMap = R('#zoom-note'), noteInline = R('#zoom-note-inline');
+  const sum = R('#about > summary');
+  return {
+    vw, vh, pageScrollY: de.scrollHeight - vh, hscroll: de.scrollWidth > vw,
+    header: Math.round(R('header').at(3) - R('header')[1]), footer: R('#foot') ? Math.round(R('#foot')[3] - R('#foot')[1]) : 0,
+    mapH: Math.round(mapR[3] - mapR[1]), mapW: Math.round(mapR[2] - mapR[0]), zoom: map.getZoom(), regionFits: fits,
+    sliderInView: inView(R('#t'), 10), modeInView: inView(R('.seg'), 30), searchInView: inView(R('#place-q'), 24),
+    timeButtonsInView: inView(R('#next'), 30), thresholdInView: inView(R('#x'), 20),
+    showingVsZoom: overlap(showing, zoomCtl), showingVsEdge: edges.some((e) => overlap(showing, e)),
+    edgeLabels: edges.length, noteOnMapShown: !!noteOnMap, noteInlineShown: !!noteInline,
+    aboutSummaryShown: !!sum, aboutSummaryInView: inView(sum),
+  };
+})()
+"""
+
+
+def layout():
+    httpd, port = s.serve()
+    ok = True
+    sizes = [("landscape", 844, 390, True), ("landscape-small", 667, 375, True), ("landscape-large", 932, 430, True),
+             ("portrait", 390, 844, True), ("desktop", 1440, 900, False)]
+    try:
+        for name, w, h, mobile in sizes:
+            with Browser(w, h, mobile=mobile) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x=10&t=0")
+                r = b.js(LAYOUT_JS)
+                land = h <= 560 and w / h >= 4 / 3
+                checks = {"no sideways scroll": not r["hscroll"]}
+                if land:
+                    checks.update({
+                        "no page scroll": r["pageScrollY"] <= 1,
+                        "map >= 75% of height": r["mapH"] >= 0.75 * h,
+                        "region fits in the map": r["regionFits"],
+                        "time slider visible without scrolling": r["sliderInView"],
+                        "mode buttons visible (>= 30 px tall)": r["modeInView"],
+                        "time buttons visible": r["timeButtonsInView"],
+                        "search visible": r["searchInView"],
+                        "zoom note not on the map (in the panel)": not r["noteOnMapShown"] and r["noteInlineShown"],
+                        "'Showing' clear of zoom buttons and edge labels": not r["showingVsZoom"] and not r["showingVsEdge"],
+                        "short footer line + 'About & sources' visible": r["aboutSummaryInView"],
+                    })
+                elif w <= 700 or h <= 560:
+                    checks.update({"map as before (62% of height)": r["mapH"] >= 0.6 * h,
+                                   "'About & sources' line shown": r["aboutSummaryShown"],
+                                   "'Showing' clear of zoom buttons": not r["showingVsZoom"]})
+                else:
+                    checks.update({"full attribution (no summary line)": not r["aboutSummaryShown"],
+                                   "zoom note on the map as before": r["noteOnMapShown"]})
+                if land:   # threshold: in view, or reachable by scrolling the side panel only (page stays put)
+                    reach = b.js("""(() => { const x = document.getElementById('x'); x.scrollIntoView({block: 'nearest'});
+                      const r = x.getBoundingClientRect(), p = document.documentElement.scrollHeight - innerHeight;
+                      const ok = r.top >= 0 && r.bottom <= innerHeight && window.scrollY === 0;
+                      document.getElementById('panel').scrollTop = 0; return ok; })()""")
+                    checks["threshold reachable by scrolling the panel only"] = reach
+                # About & sources: open, read, close (small screens)
+                if r["aboutSummaryShown"]:
+                    b.js("document.querySelector('#about > summary').scrollIntoView(); document.querySelector('#about > summary').click()")
+                    sheet = b.js("(() => { const e = document.querySelector('.about-body'); const r = e.getBoundingClientRect(); return [document.getElementById('about').open, Math.round(r.top), Math.round(r.height), e.textContent.includes('CC BY 4.0') && e.textContent.includes('DataMeet') && e.textContent.includes('Natural Earth')]; })()")
+                    b.screenshot(s.OUT / f"m8d_{name}_about.png")
+                    b.js("document.querySelector('.about-close').click()")
+                    closed = not b.js("document.getElementById('about').open")
+                    checks["About opens (full credits) and Close closes it"] = sheet[0] and sheet[3] and closed
+                    b.js("window.scrollTo(0, 0)")
+                b.screenshot(s.OUT / f"m8d_{name}.png")
+                # tap a point: the panel shows it
+                m = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left + r.width * 0.55, r.top + r.height * 0.6]; })()")
+                for t_ in ("mousePressed", "mouseReleased"):
+                    b.call("Input.dispatchMouseEvent", type=t_, x=m[0], y=m[1], button="left", clickCount=1)
+                b.wait("/^-?\\d/.test(document.body.dataset.point || '') || document.body.dataset.point === 'outside'", 20)
+                b.js("new Promise(r => setTimeout(r, 600))")
+                if land:
+                    pt = b.js("(() => { const r = document.getElementById('point-title').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()")
+                    checks["after a tap the point panel is in view"] = pt
+                    b.screenshot(s.OUT / f"m8d_{name}_point.png")
+                good = all(checks.values())
+                ok &= good
+                print(f"{'PASS' if good else 'FAIL'}  {name} {w}x{h}: header {r['header']} px, map {r['mapW']}x{r['mapH']} px "
+                      f"(zoom {r['zoom']}), footer {r['footer']} px, page scroll {r['pageScrollY']} px")
+                for k, v in checks.items():
+                    if not v:
+                        print(f"        FAIL: {k}")
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout}[sys.argv[1]]() else 1)

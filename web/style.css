@@ -229,3 +229,69 @@ body {
   border: 1px solid #b9bec6; border-radius: 4px; padding: 2px 6px; box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
 .cross-readout[hidden] { display: none; }
+
+/* ---------- Header texts: long by default, short on short screens (M8 D) ---------- */
+.run .short { display: none; }
+
+/* ---------- Footer: "About & sources" (M8 D) ---------- */
+.about > summary { list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.about > summary::-webkit-details-marker { display: none; }
+.about-link { color: var(--accent); text-decoration: underline; font-weight: 600; white-space: nowrap; }
+.about-close { display: none; }
+.zoom-note-inline { display: none; }
+@media (min-width: 701px) and (min-height: 561px) {
+  .about > summary { display: none; }            /* large screens: the full attribution, always shown */
+}
+@media (max-width: 700px), (max-height: 560px) {
+  .about[open] .about-body {                      /* small screens: full attribution as a bottom sheet */
+    position: fixed; z-index: 2000; left: 0; right: 0; bottom: 0; max-height: 70vh; overflow-y: auto;
+    background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -6px 24px rgba(0,0,0,.18);
+    padding: 12px 16px 16px; font-size: 0.8rem; line-height: 1.45; color: var(--ink-2); white-space: normal;
+  }
+  .about[open] .about-close { display: inline-block; margin-top: 10px; font: inherit; font-weight: 600;
+    padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); min-height: 36px; }
+}
+
+/* ---------- Short screens: landscape phones, small windows (M8 D) ---------- */
+@media (max-height: 560px) and (min-aspect-ratio: 4/3) {
+  /* also for landscape phones narrower than 700 px (e.g. 667x375): undo the stacked phone layout */
+  html, body { height: 100%; overflow: hidden; }
+  body { height: 100vh; min-height: 0; }
+  .layout { flex-direction: row; }
+  .map-wrap { flex: 1; height: auto; min-height: 0; }
+  .panel { border-left: 1px solid var(--line); border-top: 0; overflow-y: auto; }
+  .top { padding: 4px 12px; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .top h1 { font-size: 0.92rem; flex: none; }
+  .run { margin: 0; font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; }
+  #run-line { flex: 0 1 auto; }
+  #updated-line { flex: none; }
+  .run .long { display: none; }
+  .run .short { display: inline; }
+  .foot { padding: 3px 12px; font-size: 0.68rem; white-space: nowrap; overflow: hidden; }
+  .foot .about-short { overflow: hidden; text-overflow: ellipsis; }
+  .about > summary { flex-wrap: nowrap; }
+  .panel { width: min(300px, 45vw); padding: 6px 12px 10px; display: flex; flex-direction: column; }
+  /* controls first (search, mode, threshold, time), then the selected point, then the legend */
+  .panel > * { flex-shrink: 0; }                /* a column flex box would squeeze the controls (mode buttons to 2 px) */
+  .panel > #search { order: 1; margin-bottom: 4px; }
+  .panel > .seg { order: 2; }
+  .panel > .time { order: 3; }                    /* the time window, the most used control, right after the mode */
+  .panel > #box24 { order: 4; }
+  #search > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }  /* still read out */
+  .panel > #point { order: 5; margin-top: 8px; }
+  .panel > #point-hint { order: 5; margin-top: 6px; }
+  .panel > #legend { order: 6; }
+  .panel .eyebrow { margin: 6px 0 3px; }
+  .search input { padding: 4px 8px; font-size: 13px; }
+  .seg button { padding-top: 4px; padding-bottom: 4px; }
+  .seg-big button span { font-size: 0.68rem; }
+  /* on-map overlays: smaller, the zoom note moves into the panel, edge labels hidden (veil + dashed edge stay) */
+  .map-labels { top: 6px; left: 44px; gap: 4px; }
+  .showing span { font-size: 0.72rem; padding: 2px 6px; }
+  .map-labels .zoom-note { display: none; }
+  .zoom-note-inline:not([hidden]) { display: block; margin: 4px 0 0; padding: 4px 8px; font-size: 0.75rem; font-weight: 600;
+    background: var(--amber-bg); color: var(--amber-ink); border: 1px solid #e8cf86; border-radius: 6px; }
+  .edge-label { display: none; }
+  .leaflet-control-zoom a { width: 26px !important; height: 26px !important; line-height: 26px !important; font-size: 16px !important; }
+  .leaflet-top.leaflet-left .leaflet-control { margin: 6px 0 0 6px; }
+}
