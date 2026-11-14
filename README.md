@@ -5,7 +5,7 @@ Rain forecasts for India and nearby seas that put ECMWF's **single high-resoluti
 00z and 12z run.
 
 **Live:** https://shuvbytes.github.io/quest-precip/ · **API:** https://quest-precip-api.onrender.com/docs ·
-Status: complete for the task; two extra features are planned (see the end).
+Status: complete for the task.
 
 <p>
   <img src="docs/readme/bay_disagreement.png" width="66%" alt="Desktop map of the Bay of Bengal with a hatched area and the point panel explaining the disagreement">
@@ -21,6 +21,10 @@ Right (run 14 Nov 00z, phone): the point card for a similar case, with 262 mm ag
   disagree. Use the time slider or **▶ play**, and **swipe** to compare both side by side.
 - **Tap a point** to open the card (the amount, the chance and its "**100 skies**" picture, where the place is, a small guide character) and the panel
   (3-hourly chart, every 24 h window, ensemble table).
+- **What's interesting today:** a short guided tour of this run's stops, chosen automatically: the heaviest rain, a major city,
+  the biggest disagreement, a sharp wet-to-dry contrast and the ensemble's most confident heavy rain.
+- **Plan my day:** pick a place and a day (23:30 → 23:30 IST, 8 three-hour windows) to see the driest stretch and the
+  ensemble's chance of rain, with a note on how the ensemble's 24 h window lines up with your day.
 - **Find a place** (old names work too: Madras → Chennai). Arrow keys move one grid point at a time, so the whole map is usable from the keyboard.
 - It works on phones in portrait and landscape, and every view is a shareable link.
 
@@ -67,8 +71,7 @@ python -m pytest                                           # tests; dev checks: 
 ## Limits and next steps
 - Values are 0.25° grid points (~25 km apart), and rain varies within that distance. The ensemble's 24 h windows don't match calendar days.
   GitHub's scheduled runs can start hours late. The free API sleeps after 15 minutes, which costs about 30 s on the first request.
-- Next: **plan my day** (driest stretch of a chosen day), **story mode** (a guided tour of the run's most interesting spots),
-  vector hatching (the raster stripes look stepped at maximum zoom), and an IMD rain-day (08:30–08:30 IST) view.
+- Next: vector hatching (the raster stripes look stepped at maximum zoom) and an IMD rain-day (08:30–08:30 IST) view.
 
 ## Credits
 Forecast data © ECMWF, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (modified: cropped, de-accumulated,
