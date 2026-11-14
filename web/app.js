@@ -970,6 +970,7 @@ function renderPointContent(app) {
   document.body.dataset.source = src.kind;
   renderCard(app);
   renderStory(app);
+  renderPlan(app);
 }
 
 /* ---------- place search (M8 A): a WAI-ARIA combobox over the same local place list (no external service) ----------
@@ -999,14 +1000,14 @@ function placeMatches(app, q) {
   return out.slice(0, 8);
 }
 
-function wireSearch(app) {
-  const input = $("place-q"), list = $("place-list"), status = $("place-status");
+function wireSearch(app, ids = { input: "place-q", list: "place-list", status: "place-status", opt: "place-opt" }, onChoose = null) {
+  const input = $(ids.input), list = $(ids.list), status = $(ids.status);
   let results = [], active = -1;
   const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); active = -1; };
   const highlight = (i) => {
     active = i;
     [...list.children].forEach((li, k) => li.setAttribute("aria-selected", String(k === i)));
-    if (i >= 0) input.setAttribute("aria-activedescendant", `place-opt-${i}`);
+    if (i >= 0) input.setAttribute("aria-activedescendant", `${ids.opt}-${i}`);
     else input.removeAttribute("aria-activedescendant");
   };
   const choose = (i) => {
@@ -1014,6 +1015,7 @@ function wireSearch(app) {
     if (!r) return;
     input.value = r.p.name;
     close();
+    if (onChoose) { onChoose(r.p); return; }
     status.textContent = `${r.p.name}, ${r.p.area} selected; forecast panel opened.`;
     app.map.setView([r.p.lat, r.p.lon], Math.max(app.map.getZoom(), 7), { animate: false });
     selectPoint(app, r.p.lat, r.p.lon, true);
@@ -1029,7 +1031,7 @@ function wireSearch(app) {
     }
     results.forEach((r, i) => {
       const li = el("li", null, "");
-      li.id = `place-opt-${i}`;
+      li.id = `${ids.opt}-${i}`;
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", "false");
       const b = el("b", null, r.p.name);
@@ -1214,6 +1216,85 @@ function renderStory(app) {
     cap.append(t("The ensemble's most confident heavy rain: a "), num(pct, "story-pct"), t(` chance of ≥ ${x} mm, ${when}, ${near.charAt(0).toLowerCase() + near.slice(1)}; the single run gives `),
       num(mm, "story-mm"), t("."));
   }
+}
+
+/* ---------- Plan my day (feature 4): twin of api/pointcore.py plan_day (every string compared by m8_checks.py plan) ----------
+   For the current point and an IST calendar day: every HRES 3-hour window that overlaps the day (exact IST times; parts of
+   neighbouring days marked), the longest run of windows below each window's display floor, and the ENS chance of >= X mm
+   for the 24 h window overlapping the day most, with how much of the day it covers (ENS windows ignore calendar days). */
+const IST_MS = 330 * 60 * 1000;
+const istDate = (ms) => new Date(ms + IST_MS).toISOString().slice(0, 10);
+function planDays(m) {
+  const out = [];
+  for (const f of m.products.hres_3h.frames) {
+    for (const d of [istDate(parseUTC(f.start_utc)), istDate(parseUTC(f.end_utc) - 60000)]) if (!out.includes(d)) out.push(d);
+  }
+  return out;
+}
+function dayLabel(day) {
+  const d = new Date(`${day}T00:00:00Z`);
+  return `${DAYS[d.getUTCDay()]} ${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]}`;
+}
+function planDay(app, day) {
+  const { m, src } = app, P = m.products, d0 = Date.parse(`${day}T00:00:00Z`) - IST_MS, d1 = d0 + 864e5;
+  const hm = (t) => {
+    if (t === d1) return "24:00";
+    const d = new Date(t + IST_MS), s = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    return istDate(t) === day ? s : `${s} (${DAYS[d.getUTCDay()]})`;
+  };
+  const entries = [];
+  P.hres_3h.frames.forEach((f, k) => {
+    const a = parseUTC(f.start_utc), b = parseUTC(f.end_utc);
+    if (a < d1 && b > d0) {
+      const v = src.val("hres_3h", [k]);
+      entries.push({ a, b, label: `${hm(a)}–${hm(b)}`, text: fmtMm(v, f.lowest_drawn), dry: v < f.lowest_drawn });
+    }
+  });
+  let best = null, run = [];
+  for (const e of [...entries, null]) {
+    if (e && e.dry) { run.push(e); continue; }
+    if (run.length && (!best || run.length > best.length)) best = run;
+    run = [];
+  }
+  const stretch = entries.length && entries.every((e) => e.dry) ? "Dry in every 3-hour window shown (each below the lowest amount shown)."
+    : !best ? "No dry 3-hour window on this day." : `Driest stretch: ${hm(best[0].a)}–${hm(best[best.length - 1].b)} IST.`;
+  const x = state.x, kx = P.ens_prob.thresholds_mm.map(thrKey).indexOf(x);
+  let top = null;
+  P.ens_prob.frames_by_threshold[x].forEach((f, k) => {
+    const h = (Math.min(parseUTC(f.end_utc), d1) - Math.max(parseUTC(f.start_utc), d0)) / 36e5;
+    if (!top || h > top.h) top = { h, k, f };
+  });
+  const pct = fmtPct(src.val("ens_prob", [kx, top.k]), top.f.lowest_drawn);
+  const r1 = (v) => fmt(Math.round(v * 10) / 10);
+  const covered = entries.reduce((s, e) => s + (Math.min(e.b, d1) - Math.max(e.a, d0)) / 36e5, 0);
+  return {
+    day: dayLabel(day), entries, best,
+    stretch, chance: `Chance of ≥ ${fmt(x)} mm in the window ${top.f.label_ist}: ${pct}.`,
+    note: `The ensemble's 24-hour window covers ${r1(top.h)} of this day's 24 hours; its windows do not follow calendar days.`,
+    cover: covered >= 24 ? "" : `The forecast covers only ${r1(covered)} hours of this day (${hm(Math.max(entries[0].a, d0))}–${hm(Math.min(entries[entries.length - 1].b, d1))} IST).`,
+  };
+}
+function renderPlan(app) {
+  const box = $("plan-out"), sel = $("plan-day");
+  if (!$("plan").open) return;
+  if (!app.point || !app.src) { box.innerHTML = ""; box.appendChild(el("p", "sub", "Pick a place above, or tap the map.")); return; }
+  const r = planDay(app, sel.value);
+  box.innerHTML = "";
+  const head = el("p", "plan-head", `${nearText(app.places || [], app.point.lat, app.point.lon)} · ${r.day} (IST)`);
+  const s1 = el("p", "plan-sentence", `${r.stretch} ${r.chance}`);
+  s1.dataset.field = "plan-sentence";
+  const ul = el("ul", "plan-list");
+  r.entries.forEach((e, i) => {
+    const li = el("li", (e.dry ? "dry" : "wet") + (r.best && r.best.includes(e) ? " best" : ""));
+    const a = el("span", null, e.label), b = el("span", null, e.text);
+    a.dataset.field = `plan-w${i}`; b.dataset.field = `plan-v${i}`;
+    li.append(a, b);
+    ul.appendChild(li);
+  });
+  const note = el("p", "sub", r.note); note.dataset.field = "plan-note";
+  box.append(head, s1, ul, note);
+  if (r.cover) { const c = el("p", "sub", r.cover); c.dataset.field = "plan-cover"; box.appendChild(c); }
+  box.appendChild(el("p", "sub", "3-hour amounts from the single run (HRES); a window counts as dry when it is below the map's lowest amount shown."));
 }
 
 function guideOn() { try { return localStorage.getItem("guide") !== "off"; } catch (e) { return true; } }
@@ -1639,6 +1720,19 @@ async function main() {
   }
   wire(app);
   wireSearch(app);
+  // Plan my day: its own place field (same search component), an IST day picker; uses the shared current point
+  const daySel = $("plan-day");
+  planDays(m).forEach((d) => { const o = document.createElement("option"); o.value = d; o.textContent = `${dayLabel(d)} (IST)`; daySel.appendChild(o); });
+  if (daySel.options.length > 1) daySel.selectedIndex = 1;      // the first day is usually only partly covered
+  wireSearch(app, { input: "plan-q", list: "plan-list", status: "plan-status", opt: "plan-opt" }, (p) => {
+    $("plan-status").textContent = `${p.name} selected for planning.`;
+    selectPoint(app, p.lat, p.lon, false);
+    renderPlan(app);
+  });
+  daySel.addEventListener("change", () => renderPlan(app));
+  $("plan").addEventListener("toggle", () => renderPlan(app));
+  const sx = $("x");
+  sx.addEventListener("change", () => renderPlan(app));
   renderHeader(m);
   renderFooter(m);
   render(app);

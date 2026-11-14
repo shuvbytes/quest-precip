@@ -67,6 +67,19 @@
 
       <button type="button" class="story-open" id="story-open">What's interesting today ▸</button>
 
+      <details class="plan" id="plan">
+        <summary>Plan my day</summary>
+        <div class="search plan-search">
+          <label for="plan-q" class="eyebrow">Place</label>
+          <input id="plan-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false"
+                 aria-controls="plan-list" autocomplete="off" spellcheck="false" placeholder="City, or tap the map">
+          <ul id="plan-list" role="listbox" aria-label="Matching places" hidden></ul>
+          <p id="plan-status" class="sr-only" aria-live="polite"></p>
+        </div>
+        <label class="row">Day <select id="plan-day" aria-label="Day to plan (IST)"></select></label>
+        <div id="plan-out" class="plan-out" aria-live="polite"></div>
+      </details>
+
       <!-- Point panel: right after the place search, so on phones (stacked layout) it sits just below the map. -->
       <section id="point" class="point" hidden aria-live="polite" aria-label="Forecast at the selected point">
         <div class="point-head">

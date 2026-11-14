@@ -788,5 +788,81 @@ def story():
     return ok
 
 
+def plan():
+    """Feature 4: every string in 'Plan my day' == pointcore.plan_day (Python twin) for 3 places x 3 days (+ a threshold change)."""
+    import json
+    import time
+    sys.path.insert(0, str(s.ROOT / "api"))
+    import pointcore as pc
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    arrays = pc.decode(m, (s.SITE / "data" / "points.bin").read_bytes())
+    g = m["grid"]
+    days = pc.plan_days(m)
+    httpd, port = s.serve()
+    ok = True
+    res = []
+    def read(b):
+        return b.js("""(() => { const f = (n) => (document.querySelector(`[data-field="${n}"]`) || {}).textContent || null;
+          const n = document.querySelectorAll('#plan-out .plan-list li').length;
+          return {point: document.body.dataset.point, sentence: f('plan-sentence'), note: f('plan-note'), cover: f('plan-cover'),
+                  w: [...Array(n).keys()].map(i => f('plan-w' + i)), v: [...Array(n).keys()].map(i => f('plan-v' + i)),
+                  dry: [...document.querySelectorAll('#plan-out .plan-list li')].map(li => li.classList.contains('dry'))}; })()""")
+    def compare(b, place, day, x):
+        r = read(b)
+        lat, lon = map(float, r["point"].split(","))
+        row, col = round((g["lat_north"] - lat) / g["dlat"]), round((lon - g["lon_west"]) / g["dlon"])
+        want = pc.plan_day(m, arrays, row, col, day, x)
+        good = (r["sentence"] == f"{want['stretch']} {want['chance']}" and r["note"] == want["note"] and (r["cover"] or "") == want["cover"]
+                and r["w"] == [e["label"] for e in want["entries"]] and r["v"] == [e["text"] for e in want["entries"]]
+                and r["dry"] == [e["dry"] for e in want["entries"]])
+        res.append((f"{place}, {pc.day_label(day)}, X={x}: {len(r['w'])} windows; '{r['sentence']}'" + (f" [{r['cover']}]" if r["cover"] else ""), good))
+    try:
+        with Browser(1440, 900) as b:
+            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")
+            b.js("document.querySelector('#plan > summary').click()")
+            hint = b.js("document.getElementById('plan-out').textContent")
+            res.append(("opened with no point: asks for a place", "Pick a place" in hint))
+            for place in ("Chennai", "Mumbai", "Port Blair"):
+                b.js("document.getElementById('plan-q').value=''; document.getElementById('plan-q').focus()")
+                b.type(place.lower())
+                b.wait("!document.getElementById('plan-list').hidden")
+                b.key("Enter")
+                b.wait("!!document.querySelector('[data-field=plan-sentence]')", 30)
+                for day in (days[0], days[1], days[-1]):
+                    b.js(f"(() => {{ const s = document.getElementById('plan-day'); s.value = '{day}'; s.dispatchEvent(new Event('change')); }})()")
+                    time.sleep(0.15)
+                    compare(b, place, day, b.js("document.getElementById('x').value"))
+            b.js("(() => { const s = document.getElementById('x'); s.value = '5'; s.dispatchEvent(new Event('change')); })()")
+            time.sleep(0.2)
+            compare(b, "Port Blair (threshold changed)", days[-1], "5")
+            b.js(f"(() => {{ const s = document.getElementById('plan-day'); s.value = '{days[1]}'; s.dispatchEvent(new Event('change')); }})()")
+            b.js("document.getElementById('panel').scrollTop = 0")      # the side panel scrolls, never the desktop page
+            b.screenshot(s.OUT / "plan_desktop.png")
+            # a map tap also feeds the plan (shared current point)
+            mx, my = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left + r.width * 0.45, r.top + r.height * 0.55]; })()")
+            for t_ in ("mousePressed", "mouseReleased"):
+                b.call("Input.dispatchMouseEvent", type=t_, x=mx, y=my, button="left", clickCount=1)
+            b.wait("/^-?\\d/.test(document.body.dataset.point || '')", 30)
+            time.sleep(0.3)
+            compare(b, "map tap", days[1], "5")
+        for name, w, h in (("portrait", 390, 844), ("landscape", 844, 390)):
+            with Browser(w, h, mobile=True) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0&p=13.08,80.27")
+                b.wait("/^-?\\d/.test(document.body.dataset.point || '')", 30)
+                b.js("document.querySelector('#plan > summary').click(); document.getElementById('plan').scrollIntoView({block: 'start'})")
+                time.sleep(0.4)
+                compare(b, f"{name} (p= link Chennai)", b.js("document.getElementById('plan-day').value"), "10")
+                hs = b.js("document.documentElement.scrollWidth > innerWidth")
+                b.screenshot(s.OUT / f"plan_{name}.png")
+                res.append((f"{name}: no sideways scroll", not hs))
+        for name, good in res:
+            print(f"{'PASS' if good else 'FAIL'}  {name}")
+            ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies, "swipe": swipe, "story": story}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies, "swipe": swipe, "story": story, "plan": plan}[sys.argv[1]]() else 1)

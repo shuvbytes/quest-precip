@@ -279,3 +279,86 @@ def point_report(m, arrays, lat, lon, x_key, t, places=None):
         "hres_24h": series("hres_24h", h24),
         "ens_chance": chances,
     }
+
+
+# ---------- "Plan my day" (feature 4): twin of web/app.js planDay; every string is compared by m8_checks.py plan ----------
+
+import datetime as _dt
+
+_IST = _dt.timedelta(hours=5, minutes=30)
+_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _utc(iso):
+    return _dt.datetime.strptime(iso, "%Y-%m-%dT%H:%MZ")
+
+
+def _ist(t):
+    return t + _IST
+
+
+def plan_days(m):
+    """IST calendar days (YYYY-MM-DD) touched by the HRES 3 h windows, in order."""
+    days = []
+    for f in m["products"]["hres_3h"]["frames"]:
+        a, b = _ist(_utc(f["start_utc"])), _ist(_utc(f["end_utc"]) - _dt.timedelta(minutes=1))
+        for d in (a.date(), b.date()):
+            if d.isoformat() not in days:
+                days.append(d.isoformat())
+    return days
+
+
+def day_label(day):
+    d = _dt.date.fromisoformat(day)
+    return f"{_DAYS[d.weekday()]} {d.day:02d} {_MONTHS[d.month - 1]}"
+
+
+def plan_day(m, arrays, row, col, day, x_key):
+    """The 'Plan my day' block for one grid point, IST day (YYYY-MM-DD) and ENS threshold, as the page shows it."""
+    P = m["products"]
+    d0 = _dt.datetime.fromisoformat(day) - _IST               # 00:00 IST of that day, in UTC
+    d1 = d0 + _dt.timedelta(days=1)
+    dname = lambda t: _DAYS[_ist(t).weekday()]
+    def hm(t):                                                    # "08:30", "02:30 (Sun)"; the day's end is "24:00"
+        if t == d1:
+            return "24:00"
+        return _ist(t).strftime("%H:%M") + ("" if _ist(t).date() == _ist(d0).date() else f" ({dname(t)})")
+    entries = []
+    for k, f in enumerate(P["hres_3h"]["frames"]):
+        a, b = _utc(f["start_utc"]), _utc(f["end_utc"])
+        if a < d1 and b > d0:
+            v = float(arrays["hres_3h"][k, row, col])
+            entries.append({"a": a, "b": b, "label": f"{hm(a)}–{hm(b)}", "text": fmt_mm(v, f["lowest_drawn"]),
+                            "dry": v < f["lowest_drawn"]})
+    # longest run of consecutive dry windows (earliest if tied)
+    best, run = None, []
+    for e in entries + [None]:
+        if e is not None and e["dry"]:
+            run.append(e)
+            continue
+        if run and (best is None or len(run) > len(best)):
+            best = run
+        run = []
+    if entries and all(e["dry"] for e in entries):
+        stretch = "Dry in every 3-hour window shown (each below the lowest amount shown)."
+    elif best is None:
+        stretch = "No dry 3-hour window on this day."
+    else:
+        stretch = f"Driest stretch: {hm(best[0]['a'])}–{hm(best[-1]['b'])} IST."
+    # ENS 24 h window overlapping the day most (earliest if tied)
+    kx = threshold_keys(m).index(x_key)
+    ov = []
+    for k, f in enumerate(P["ens_prob"]["frames_by_threshold"][x_key]):
+        a, b = _utc(f["start_utc"]), _utc(f["end_utc"])
+        ov.append(((min(b, d1) - max(a, d0)).total_seconds() / 3600, k, f))
+    hours, k, f = max(ov, key=lambda t: (t[0], -t[1]))
+    pct = fmt_pct(float(arrays["ens_prob"][kx, k, row, col]), f["lowest_drawn"])
+    chance = f"Chance of ≥ {x_key} mm in the window {f['label_ist']}: {pct}."
+    note = (f"The ensemble's 24-hour window covers {js_num(round(hours, 1))} of this day's 24 hours; "
+            f"its windows do not follow calendar days.")
+    covered = sum((min(e["b"], d1) - max(e["a"], d0)).total_seconds() / 3600 for e in entries)
+    cover = "" if covered >= 24 else (f"The forecast covers only {js_num(round(covered, 1))} hours of this day "
+                                      f"({hm(max(entries[0]['a'], d0))}–{hm(min(entries[-1]['b'], d1))} IST).")
+    return {"day": day_label(day), "entries": [{k_: e[k_] for k_ in ("label", "text", "dry")} for e in entries],
+            "stretch": stretch, "chance": chance, "note": note, "cover": cover}

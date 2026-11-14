@@ -718,6 +718,18 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Test harness note: `m8_checks.py card` timed out twice on page load (once on 14 Nov afternoon, once now) and passed on
   rerun both times: headless Chrome hiccup, not a page error.
 
+## Feature 4 — Plan my day (14 Nov) — `web/app.js` planDay/renderPlan, twin `api/pointcore.py` plan_day, `m8_checks.py plan`
+- Collapsible section in the side panel: own place field (the search component generalised: ids + onChoose), IST day picker
+  (days touched by the run; default the 2nd, the 1st is partial). Uses the shared current point (map tap, p= link, search).
+- Shows every HRES 3 h window overlapping the day with exact IST times (neighbouring-day parts marked "(Sat)"; day end
+  "24:00"), each value with the frame's floor rule; driest stretch = longest run of windows below their floor (earliest if
+  tied), or "No dry 3-hour window on this day." / "Dry in every 3-hour window shown (each below the lowest amount shown)."
+  (first wording "Dry all day" overstated on days the run covers only partly → changed); ENS chance of ≥ X for the 24 h
+  window overlapping the day most + "covers N of this day's 24 hours; its windows do not follow calendar days"; partial days:
+  "The forecast covers only N hours of this day (…)".
+- Check: every string == Python twin for Chennai/Mumbai/Port Blair × first/second/last day, a threshold change, a map tap,
+  phone portrait/landscape (16/16); `test_plan_day_twin` in CI.
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)

@@ -257,3 +257,18 @@ def test_api_point_says_near_which_place(client):
     assert j["near"]["name"] == "Chennai" and j["near"]["text"].startswith("Near Chennai (")
     j = client.get("/point", params={"lat": 15.0, "lon": 88.0}).json()          # mid-Bay
     assert " km " in j["near"]["text"] and " of " in j["near"]["text"], j["near"]
+
+def test_plan_day_twin(data):
+    """Plan my day (feature 4), Python twin of the page: days, overlapping windows, partial-day note, ENS overlap note."""
+    import pointcore as pc
+    m, arrays, _ = data
+    days = pc.plan_days(m)
+    assert len(days) >= 6
+    full = pc.plan_day(m, arrays, 100, 61, days[1], "10")          # a whole IST day: 9 overlapping 3 h windows, no cover note
+    assert len(full["entries"]) == 9 and full["cover"] == ""
+    assert full["note"].startswith("The ensemble's 24-hour window covers ") and "calendar days" in full["note"]
+    first = pc.plan_day(m, arrays, 100, 61, days[0], "10")         # the run starts mid-day: partial
+    assert first["cover"].startswith("The forecast covers only ")
+    assert all(e["text"].endswith("mm") for e in full["entries"])
+    assert (full["stretch"].startswith("Driest stretch: ") or full["stretch"].startswith("Dry in every")
+            or full["stretch"] == "No dry 3-hour window on this day.")
