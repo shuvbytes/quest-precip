@@ -43,3 +43,33 @@ The app footer carries this attribution.
 
 ## Not used
 No tile server or third-party basemap is used, so no other borders are drawn and no other attribution is needed.
+
+## `states.geojson` — internal state/UT boundaries, drawn as thin grey lines (M8, 14 Nov 2026)
+- Source: **DataMeet India community**, `States/Admin2.shp` in https://github.com/datameet/maps, pinned to the same
+  commit `b3fbbde595` as the India outline; SHA-256 of each downloaded file checked by `make_geo.py`
+  (`.shp` `b61ebc11a748…`, `.dbf` `4ec2f9b83263…`, full digests in `make_geo.ADMIN2_FILES`).
+- What it is: 36 features, field `ST_NM` = the current 28 states and 8 union territories (Ladakh separate; "Dadra and
+  Nagar Haveli and Daman and Diu" merged). File history: "Updated the States & UT to status as per Jan 2020" (2020-05-06),
+  "Updated Ladhak & J&K boundry as per latest SOI Map" (2021-08-24), "Merged the two Ladhak features" (2021-10-25).
+- **Licence: CC BY 4.0.** The `States/` folder has no README or licence of its own, so the repository's default applies,
+  quoted from its `README.md` ("Data License"): **"Unless explicitly stated, all datasets in this repository is shared under
+  CC BY 4.0 license. Please mention and link to relevant dataset in the attribution"**. Attribution given in the page
+  footer: *State boundaries* (https://github.com/datameet/maps/tree/master/States) by DataMeet India community (CC BY 4.0).
+  Modification: only edges shared by two states/UTs are kept (outer edges, i.e. coast and national border, are dropped so
+  the official India outline above stays the only national border), simplified 0.01°, rounded to 0.001°.
+- Not used: `Survey-of-India-Index-Maps/StateBoundary` in the same repo: pre-2019 units (no Ladakh; Dadra and Nagar Haveli
+  and Daman and Diu separate) and its README states no licence.
+
+## `places.json` — city, country and sea labels; place search; "Near <place>"
+- Cities: **Natural Earth** 10 m `populated_places` (public domain, as above). Kept inside the map view (−1–44°N,
+  59–106°E): national capitals, the capitals of all 36 Indian states/UTs (checked against an explicit list in
+  `make_geo.CAPITALS`: each must exist in Natural Earth and lie in its state's polygon; Chandigarh, capital of Punjab and
+  Haryana, lies in Chandigarh UT), places with population ≥ 300,000 and places with Natural Earth scale rank ≤ 6.
+  Label density uses Natural Earth's `MIN_ZOOM`.
+- Corrections to Natural Earth (listed, not silent): display names "Shimla" (NE "Simla") and "Dehradun" (NE "Dehra Dun"),
+  old names kept as search aliases; Yangon not marked as Myanmar's capital (Naypyidaw is). Natural Earth's own state
+  field is not used (it puts Gandhinagar in "Dadra and Nagar Haveli"): for every place inside India's official boundary
+  the state comes from DataMeet `States/Admin2` (point in polygon), so place names never contradict the boundary drawn.
+  Elsewhere the country is Natural Earth's.
+- Country and sea labels: hand-placed points (`make_geo.COUNTRIES`, `make_geo.SEAS`); each country label is checked to lie
+  inside that country in Natural Earth `admin_0_countries` and away from India's official boundary; sea labels over water.
