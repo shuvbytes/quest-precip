@@ -161,8 +161,8 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (14 Nov, ~02:15 IST): M0–M7b done; live run 2026-11-13 12z; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
-**M0–M7b done; 75 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
+## Status (14 Nov, ~12:00 IST): M0–M7b done; pre-M8 checks done; live run 2026-11-13 12z; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
+**M0–M7b done; 77 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
 **Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
 slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
 both sentences; app.js picks `wetter_heavy` only for X ≥ 50). Phone check (Android Chrome): portrait OK; landscape poor → M8 item D. Earlier (evening): M6 closed by the user after confirming
@@ -221,7 +221,11 @@ Commits so far:
 | `5ffd6ca` | M7b live checks + cold start recorded |
 | `a96b624` | Reload trigger protected: token-only `POST /refresh` replaces public `/health?check=1` |
 | `487d7ee` | Floor test checks the rule (13 Nov 12z raised floors); chart note for mixed floors |
-| this commit | CLAUDE.md: refresh token, first 12z deploy |
+| `eaf432c` | CLAUDE.md: refresh token, first 12z deploy |
+| `869460c` | Floor mutation check; new PNG-floor test closes a gap no test covered |
+| `7602d8c` | Validation: 260 mm / 3 h Bay peak is in ECMWF's own charts |
+| `0b0f17c` | Hourly :23 cron slots for 6 h after each run (GitHub delayed slots ~4 h) |
+| this commit | CLAUDE.md: pre-M8 checks |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -461,11 +465,16 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - **Live URL: https://shuvbytes.github.io/quest-precip/** (repo made public 13 Nov after an audit: 48 tracked files, no
   data/GRIB/points.bin/manifest/site_build/.claude now or in history, no token-like strings; the commit email stays public,
   user's choice). `.gitignore` now ignores all of `.claude/`. Pages source = "GitHub Actions" (no gh-pages branch).
-- **Schedule (UTC):** 08:23 and 20:23 (13:53 / 01:53 IST), backups 10:23 and 22:23. Why: measured Last-Modified on
+- **Schedule (UTC), changed 14 Nov:** hourly at :23 for 6 h after each run: 08:23–13:23 and 20:23–01:23 (was 08:23/20:23 +
+  backups 10:23/22:23). Why the first slot: measured Last-Modified on
   data.ecmwf.int (13 Nov 00z, 12 Nov 12z): HRES to 144 h 07:34 / 19:34, ENS ep 08:01 / 20:01 UTC; ~20 min margin; minute
   :23 avoids top-of-hour congestion where GitHub delays/drops scheduled runs. Scheduled runs compare
   `fetch.py --print-latest` with the live manifest `run.utc` and skip if equal (no redeploy of the same forecast).
-  **No scheduled run observed yet** (first one due 20:23 UTC, 13 Nov) — check its result.
+  **First scheduled runs (13→14 Nov night), both ~4 h late:** 43537387045 (20:23 slot) started 00:55 UTC, 43546799504
+  (22:23 slot) started 02:31 UTC; both: build success, "Live site already shows run 2026-11-13T12:00Z; nothing to deploy",
+  deploy skipped (12z had been deployed by hand at 20:36 UTC). None dropped. Because a ~4 h delay on two slots could hold
+  a forecast back for half a day, the slots became hourly for 6 h (`0b0f17c`); extra slots skip in ~20 s.
+  Live on 14 Nov 06:15 UTC: site and API both run 2026-11-13 12z, build 20:37Z. 14 Nov 00z scheduled deploy: not yet at 06:22 UTC (first slot 08:23 UTC); to be confirmed.
 - Job `build`: checkout → micromamba with the light `environment.yml` (cached) → newer-run check → fetch (HRES 21.8 MB,
   ENS 28.8 MB) → `pytest` (41 passed, 1 skipped: the test pinned to 12 Nov 00z files) → build → upload-pages-artifact.
   Job `deploy`: deploy-pages. Manual: `gh workflow run deploy.yml` (inputs `skip_if_unchanged`, `force_fail` for tests).
@@ -535,8 +544,21 @@ visible; header scrolled away; region does not fit). Build after A and B:
   the visitor nothing but the 3 s wait on the first click (then points.bin, ~0.6 MB); the page's load-time `/health`
   ping usually wakes it before later clicks. Render's docs say ~1 min to wake; we saw ~32 s.
 
+## Pre-M8 checks (14 Nov, user questions)
+- **Scheduled runs:** see the M7 section (both fired ~4 h late, both skipped correctly; cron slots now hourly).
+- **Floor test is corrected, not loosened** (`pipeline/mutation_floor_check.py`, in memory, fresh process per mutant):
+  correct code PASS; "coarse frame left at 0.5 mm" CAUGHT (test_real_run_floor_rule + test_floors_and_files); "raised one
+  edge too far" CAUGHT (test_real_run_floor_rule); "manifest right, PNG drawn from the first edge" was caught by **no**
+  existing test (nothing looked at the picture) → new `test_png_never_colours_below_lowest_drawn` (every frame's PNG codes
+  vs its lowest_drawn; 13 raised frames in 13 Nov 12z) catches it, plus a synthetic `render_png` test so the check is never
+  vacuous on runs without raised floors.
+- **260 mm / 3 h Bay peak** (13 Nov 12z, 14.50N 84.75E, 120–123 h): neighbours 15.6–99.6 mm; one intense step in a cyclonic
+  system; ECMWF OpenCharts for the same run show > 64 mm/h at +123 h at ~14.7N 84.4E (eyeballed, ~40 km) and the same three
+  300–1000 mm patches at +144 h as our ≥ 300 mm cells; ENS P(≥ 100 mm) 4 %. Real but extreme single-run scenario.
+  Record: `docs/validation/2026-11-13_12z_bay_peak.md`.
+
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
-0. Check the first scheduled run (20:23 UTC 13 Nov → 12z run) succeeded/skipped.
+0. Confirm the 14 Nov 00z scheduled deploy (watcher running; see M7 section).
 1. **M8 A + B**: place names (cities, country labels, state lines, local search, "Near <city>") and grid-step keyboard
    navigation with live readout; then **M8 D** (short screens / landscape phones).
 2. ~~M7b~~ done 13 Nov night (Render).
