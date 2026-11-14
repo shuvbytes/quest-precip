@@ -161,7 +161,7 @@ User: comfortable with intermediate Python/numpy; new to web dev and deployment,
   (10–50 %) over a wider area than HRES rain (e.g. Bangladesh), as expected from ensemble spread.
 - Prob legend fixed: bins end at 100 (not 100.01); values ≥ last edge take the top colour.
 
-## Status (14 Nov, ~12:00 IST): M0–M7b done; pre-M8 checks done; live run 2026-11-13 12z; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
+## Status (14 Nov, ~13:30 IST): M0–M7b + M8 A/B done (pushed; goes live with the next scheduled Pages deploy); live run 2026-11-13 12z; site https://shuvbytes.github.io/quest-precip/, API https://quest-precip-api.onrender.com
 **M0–M7b done; 77 tests passing; repo public; site deployed by GitHub Actions (M7), point API on Render (M7b section).**
 **Laptop check of the live site (user, Safari, 13 Nov night): all OK**: header, Bay link (label, zoom note, hatching),
 slider, point click with progress bar, shared link, console. Wording change confirmed live (manifest `heavy_from_mm` 50,
@@ -225,7 +225,9 @@ Commits so far:
 | `869460c` | Floor mutation check; new PNG-floor test closes a gap no test covered |
 | `7602d8c` | Validation: 260 mm / 3 h Bay peak is in ECMWF's own charts |
 | `0b0f17c` | Hourly :23 cron slots for 6 h after each run (GitHub delayed slots ~4 h) |
-| this commit | CLAUDE.md: pre-M8 checks |
+| `68f98b8` | CLAUDE.md: pre-M8 checks |
+| `c78af4c` … `44f3ebf` | M8 A (state lines, places, labels, search, Near) + M8 B (grid-step keyboard) |
+| this commit | CLAUDE.md: M8 A + B, README example |
 
 How to run: `conda activate quest-precip` (built from `environment-dev.yml`).
 Fetch: `python pipeline/fetch.py` (HRES 23.5 MB + ENS 28.9 MB into git-ignored `data/raw/`).
@@ -557,10 +559,48 @@ visible; header scrolled away; region does not fit). Build after A and B:
   300–1000 mm patches at +144 h as our ≥ 300 mm cells; ENS P(≥ 100 mm) 4 %. Real but extreme single-run scenario.
   Record: `docs/validation/2026-11-13_12z_bay_peak.md`.
 
+## M8 A + B — place names and grid-step keyboard (14 Nov) — `pipeline/make_geo.py`, `web/app.js`, `pipeline/m8_checks.py`
+- **State lines** `web/geo/states.geojson`: DataMeet `States/Admin2` at the pinned commit `b3fbbde595` (SHA-256 per file;
+  36 features = 28 states + 8 UTs incl. Ladakh, DNH&DD merged). **CC BY 4.0** (no folder licence → the repo default, quoted
+  in SOURCES.md); credited in the footer. Only edges shared by two states/UTs (~500 m tolerance) are kept, so no second
+  national border appears (0.02° of 276° lies outside the official outline + 1 km). Rejected: SoI StateBoundary (pre-2019, no licence).
+  Drawn #7d838c 0.9 px under the India outline (0.7 px #9aa0a8 was invisible at the fitted zoom).
+- **Places** `web/geo/places.json` (24 kB, 8 kB gzip): 350 Natural Earth places + 10 countries + 5 seas (user: sea names yes).
+  All 36 state/UT capitals checked against their polygons (Chandigarh: in Chandigarh UT, documented). State/country of each
+  place from OUR layers (DataMeet states / official outline), never NE's ADM1 (NE puts Gandhinagar in DNH). Listed NE
+  corrections: Shimla, Dehradun, Visakhapatnam spellings (old names = aliases); Yangon not a capital; Hyderabad (Pakistan)
+  is a city. Country labels checked inside their NE country and away from India's official boundary.
+- **Labels:** pane "places" (non-clickable); NE MIN_ZOOM − 0.5 decides when a city is a candidate (capitals always), greedy
+  overlap removal by priority, whole labels only, cities only inside the forecast area, white halo. Capitals ◉ (a plain ring
+  read as "O"). Fitted desktop: 31 capitals + 15 cities + 5 countries + 4 seas; Chennai labelled on desktop and phone.
+- **Search:** WAI-ARIA combobox at the top of the side panel (above the point panel; below it the list fell off-screen).
+  Names, word starts, aliases (Madras, Bombay…), accent/case-insensitive; in-area places only. `m8_checks.py search`: chen,
+  madras → Chennai 13.00N 80.25E; bomb → Mumbai; kolk; thiruvanan; no-match message; Esc → all PASS (real key events).
+- **Near** (user: ≤ 25 km "Near Chennai (11 km)", else "457 km SE of Visakhapatnam"): nearest listed city from the grid point,
+  8-point direction from the place; `pointcore.near` = JS `nearText`; panel line `data-field="near"`; API `near` object
+  (reads `geo/places.json` from the site; None until Pages has it). m6_check 700/700 incl. near; tests for all 8 directions.
+- **Keyboard (B):** crosshair = grid point (row, col). Arrow ±1, Shift ±10, map pans only to keep it in view; +/−
+  `setZoomAround` the cross; Enter selects exactly that point; readout "11.00°N 80.75°E · 144 km SE of Puducherry" beside
+  the cross + aria-live (300 ms). Handler in capture phase with stopImmediatePropagation (Leaflet's own arrow/zoom handling
+  could otherwise also act in a real browser) + `keyboardPanDelta: 0`. `m8_checks.py keys`: snake walk over **all 18,753
+  grid points** at fitted zoom and zoom 7, desktop + phone: 0 failures (expected grid point each step, on screen, Enter exact
+  at every 500th); real key events: +1 col without a Leaflet pan, Shift +10, +/− keep the cross ±1 px, Enter, readout: PASS.
+  (Position error 0 px is a self-consistency number; the independent checks are grid point, on-screen, Enter.)
+- Dev tooling: `pipeline/cdp.py` (real-clock DevTools driver; `websocket-client` added to environment-dev.yml only);
+  `m5_screens.py` aim/edges/targets removed (old screen-offset model).
+
+## README notes (for M8 C)
+- **Disagreement example (confirmed live 14 Nov 06:35 UTC, run 2026-11-13 12z):** 14.50°N 84.75°E, X = 100 mm, window
+  Wed 18 Nov 05:30 → Thu 19 Nov 05:30 IST: HRES **441.4 mm** vs ENS **4 %** chance of ≥ 100 mm → flagged *wetter*, 12-cell
+  group → hatched on the map; panel sentence "…only a 4 % chance of at least 100 mm here and nearby. Heavy rain is possible,
+  not likely."; values from the Render API. At X = 50 mm the same window is *not* flagged (P≥50 = 28 % ≥ 25 %). Screenshot
+  `outputs/checks/live_13nov12z_bay_hatch.png` (git-ignored; ask before committing an image to docs). Validation of the
+  underlying 260 mm/3 h peak: `docs/validation/2026-11-13_12z_bay_peak.md`. Note: the live site moves on with each run.
+
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
 0. Confirm the 14 Nov 00z scheduled deploy (watcher running; see M7 section).
-1. **M8 A + B**: place names (cities, country labels, state lines, local search, "Near <city>") and grid-step keyboard
-   navigation with live readout; then **M8 D** (short screens / landscape phones).
+1. ~~M8 A + B~~ done 14 Nov (live with the next scheduled deploy; then live checks + user Safari/phone check).
+   Next: **M8 D** (short screens / landscape phones).
 2. ~~M7b~~ done 13 Nov night (Render).
 3. **M8 C**: point card, then README (vector hatch if time).
 4. IMD-day view only if all of the above is done; 15 Nov buffer only.
