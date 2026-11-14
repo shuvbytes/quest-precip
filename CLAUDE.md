@@ -684,6 +684,12 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Bugs found on the way: left legend showed the chance scale (legend chose the product from the fill state); labels
   overlapped on a 390 px phone.
 
+## Deploy 14 Nov 14:41 UTC (run 43606088987): features 1 (play), 2 (100 skies), 3 (swipe compare) live
+- Live check: play advances the window; card 100 skies 24 open = chip 24 % (values from the Render API); cmp=1&sw=40 opens
+  the divider with the right image. API on the new build on try 2. Scheduled runs: still none since 02:31 UTC (both slots of
+  14 Nov 00z not fired by 14:42 UTC); manual deploys cover it.
+- **User (14 Nov): features 4 (plan my day) and 5 (story mode) deferred to later; next = README (outline first).**
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
