@@ -610,7 +610,26 @@ visible; header scrolled away; region does not fit). Build after A and B:
   no overlay overlaps, credits sheet opens/closes. Bugs the check caught: mode buttons squeezed to 2 px (flex column),
   sheet text not wrapping, 667×375 getting the portrait layout. Not yet confirmed on a real phone.
 
+## M8 C — point card + weather guide (14 Nov) — `web/app.js` renderCard/guideSVG, `pipeline/m8_checks.py card`
+- M8 A+B+D **deployed by hand 14 Nov 13:02 UTC** (run 43597633946, user: scheduling already proven) with the 14 Nov 00z run;
+  API took the build on try 1; live check: labels (Chennai), search, "Near Chennai (11 km)", values from the Render API,
+  footer credits, 844×390 map 342 px with no page scroll. User confirmed landscape in Safari Responsive Design Mode.
+- Card next to the selected point (phones: bottom sheet): nearest place, IST window, main number (3 h or 24 h as the mode),
+  chance chip for X in the 24 h window (palette colour), disagreement badge, "Full details" (closes the card, focuses the
+  panel title). Same data code as the panel. Esc closes the card first, then the panel; × closes the card only.
+- **Weather guide** (original, simple SVG shapes; alt text per pose; toggle "Show the weather guide…" in the side panel,
+  remembered in localStorage with try/catch). **Pose rules** (24 h window under the slider, first match wins):
+  disagree = point flagged wetter/drier at the current X (same flag as the panel sentence); heavy = ENS P(≥ 50 mm) ≥ 50 %;
+  light ("Some rain") = HRES 24 h ≥ 1 mm or ENS P(≥ 1 mm) ≥ 50 %; dry ("Mostly dry") otherwise. Note: "Some rain" can show
+  next to "< 1 mm" when the ensemble, not the single run, gives ≥ 1 mm ≥ 50 %.
+- Check `m8_checks.py card`: poses picked in Python for windows 0/48/96 h, 11/11 match; card texts = panel texts; badge iff
+  panel sentence; card on screen, not covering the point; Esc order, ×, Full details, toggle persists, phone sheet: PASS.
+  Sparkline skipped (time).
+
 ## README notes (for M8 C)
+- **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
+  look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
+  would keep it crisp at any zoom (user, 13–14 Nov: skipped for time).
 - **Disagreement example (confirmed live 14 Nov 06:35 UTC, run 2026-11-13 12z):** 14.50°N 84.75°E, X = 100 mm, window
   Wed 18 Nov 05:30 → Thu 19 Nov 05:30 IST: HRES **441.4 mm** vs ENS **4 %** chance of ≥ 100 mm → flagged *wetter*, 12-cell
   group → hatched on the map; panel sentence "…only a 4 % chance of at least 100 mm here and nearby. Heavy rain is possible,
@@ -621,7 +640,7 @@ visible; header scrolled away; region does not fit). Build after A and B:
 ## Next steps (order for 14 Nov, user-agreed 13 Nov night)
 0. Confirm the 14 Nov 00z scheduled deploy (watcher running; see M7 section).
 1. ~~M8 A + B~~ done 14 Nov (live with the next scheduled deploy; then live checks + user Safari/phone check).
-   ~~M8 D~~ built 14 Nov (local; user check, then deploy). Next: M8 C (point card, README).
+   ~~M8 D~~ deployed 14 Nov. ~~M8 C point card~~ built 14 Nov (local; user check, then deploy). Next: README.
 2. ~~M7b~~ done 13 Nov night (Render).
 3. **M8 C**: point card, then README (vector hatch if time).
 4. IMD-day view only if all of the above is done; 15 Nov buffer only.
