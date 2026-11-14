@@ -741,6 +741,12 @@ visible; header scrolled away; region does not fit). Build after A and B:
   20:20 UTC with `skip_if_unchanged=true`; fine-grained token (this repo, Actions read/write) created and stored by the user
   in cron-job.org only. GitHub's hourly slots stay as backup. Render cannot do this on the free tier (sleeps, no cron jobs).
 
+## Deploy 14 Nov 17:22 UTC (run 43620673493): features 4 (Plan my day) + 5 (story) live; README updated (80 lines)
+- Live check: story step 1 heaviest 713.4 mm, step 2 Visakhapatnam 52 % ≥ 10 mm; Plan my day Port Blair Sun 15 Nov
+  (23:30 Sat → 23:30 Sun IST), 8 windows, driest 17:30–20:30, 88 % ≥ 10 mm; values from the Render API.
+- Pending: user sets up cron-job.org (08:20 / 20:20 UTC workflow_dispatch, skip_if_unchanged) with a fine-grained token;
+  then verify a timed run.
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
