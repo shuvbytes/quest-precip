@@ -290,6 +290,7 @@ body {
   .panel > #point { order: 5; margin-top: 8px; }
   .panel > #point-hint { order: 5; margin-top: 6px; }
   .panel > #legend { order: 6; }
+  .panel > .guide-toggle { order: 6; }          /* with the legend, not above the controls */
   .panel .eyebrow { margin: 6px 0 3px; }
   .search input { padding: 4px 8px; font-size: 13px; }
   .seg button { padding-top: 4px; padding-bottom: 4px; }
@@ -330,3 +331,7 @@ body {
 .pcard.sheet { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; border-radius: 14px 14px 0 0;
   padding: 10px 14px 14px; z-index: 1500; box-shadow: 0 -6px 24px rgba(0,0,0,.2); }
 .guide-toggle { margin-top: 10px; }
+
+/* play (feature 1) */
+.time-row button.play { font-size: 0.8rem; color: var(--accent); font-weight: 700; }
+.time-row button.play[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }

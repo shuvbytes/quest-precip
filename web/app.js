@@ -1242,6 +1242,35 @@ function wire(app) {
   $("t").addEventListener("input", (e) => { state.t = framesFor(m)[+e.target.value].start_h; rerender(); });
   $("prev").addEventListener("click", () => step(-1));
   $("next").addEventListener("click", () => step(1));
+
+  /* Play (feature 1, user 14 Nov): steps the time slider about once a second and loops. Never autoplays; with
+     prefers-reduced-motion it steps every 2 s. Any user interaction pauses it (except Space/Enter on the button). */
+  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const playBtn = $("play");
+  let playTimer = null;
+  const setPlayBtn = (on) => {
+    playBtn.textContent = on ? "❚❚" : "▶";
+    playBtn.setAttribute("aria-pressed", String(on));
+    playBtn.setAttribute("aria-label", on ? "Pause time animation" : "Play time animation");
+    document.body.dataset.playing = on ? "1" : "0";
+  };
+  const tick = () => {
+    const frames = framesFor(m);
+    state.t = frames[(frameIndex(frames) + 1) % frames.length].start_h;   // after the last window: back to the first
+    rerender();
+  };
+  const play = () => { if (!playTimer) { playTimer = setInterval(tick, REDUCED.matches ? 2000 : 1000); setPlayBtn(true); } };
+  const pause = () => { if (playTimer) { clearInterval(playTimer); playTimer = null; setPlayBtn(false); } };
+  app.pause = pause;
+  playBtn.addEventListener("click", () => (playTimer ? pause() : play()));
+  const pauseOnPointer = (e) => { if (playTimer && !playBtn.contains(e.target)) pause(); };
+  ["pointerdown", "wheel", "touchstart"].forEach((ev) =>
+    document.addEventListener(ev, pauseOnPointer, { capture: true, passive: true }));
+  document.addEventListener("keydown", (e) => {
+    if (playTimer && !(e.target === playBtn && (e.key === " " || e.key === "Enter"))) pause();
+  }, true);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pause(); });
+  setPlayBtn(false);
   document.addEventListener("keydown", (e) => {
     if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
     if (document.activeElement === map.getContainer()) return;   // on the focused map, arrows pan (Leaflet)

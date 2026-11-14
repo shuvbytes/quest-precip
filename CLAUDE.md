@@ -644,6 +644,14 @@ visible; header scrolled away; region does not fit). Build after A and B:
 - Rename done (`m8_checks.py brand`): heading read as "Barish" (accessibility tree), "रिश" drawn as real glyphs, not boxes,
   in headless Chrome on desktop/portrait/landscape; subtitle hidden only in the one-line short-screen header.
 
+## Feature 1 — play (14 Nov) — `web/app.js` wire(), `m8_checks.py play`
+- ▶/❚❚ button at the end of the time row (aria-pressed, label Play/Pause time animation). Steps the slider to the next
+  frame every 1 s (2 s with prefers-reduced-motion), loops last → first, never autoplays. Pauses on any pointer press,
+  wheel, touch or key press (except Space/Enter on the button) and when the tab is hidden.
+- Check (real clicks/keys): no autoplay in 3 s; labels after 1/2/3 s = manifest frames 9, 10, then 0 (loop); map click,
+  other key, › all pause; Space plays/pauses; reduced motion: no autoplay, 2 s steps; phone portrait 44 px / landscape
+  34 px button, no sideways scroll. Also fixed: the guide toggle jumped to the top of the panel on short screens.
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)

@@ -452,5 +452,84 @@ def brand():
     return ok
 
 
+def play():
+    """Feature 1: real clicks/keys; window label after each step = the manifest's next frame; pauses; reduced motion."""
+    import json
+    import time
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    frames = m["products"]["hres_24h"]["frames"]
+    httpd, port = s.serve()
+    ok = True
+    label = "document.getElementById('t-label').textContent"
+    playing = "document.body.dataset.playing"
+    def click_el(b, sel):
+        x, y = b.js(f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }})()")
+        for t_ in ("mousePressed", "mouseReleased"):
+            b.call("Input.dispatchMouseEvent", type=t_, x=x, y=y, button="left", clickCount=1)
+    try:
+        res = []
+        with Browser(1440, 900) as b:
+            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=96")
+            l0 = b.js(label)
+            time.sleep(3)
+            res.append(("no autoplay: nothing moves in 3 s", b.js(label) == l0 and b.js(playing) == "0"))
+            click_el(b, "#play")
+            t0 = time.time()
+            seen = []
+            for k in range(3):
+                time.sleep(max(0, t0 + 1.05 * (k + 1) + 0.15 - time.time()))
+                seen.append(b.js(label))
+            want = [frames[9]["label_ist"], frames[10]["label_ist"], frames[0]["label_ist"]]   # 96 h -> 108, 120, loop to 0
+            res.append((f"steps ~1/s through the manifest frames and loops (got {seen})", seen == want))
+            res.append(("button shows pause, aria-pressed true", b.js("[document.getElementById('play').textContent, document.getElementById('play').getAttribute('aria-pressed')]") == ["❚❚", "true"]))
+            x, y = b.js("(() => { const r = document.getElementById('map').getBoundingClientRect(); return [r.left + 300, r.top + 300]; })()")
+            b.call("Input.dispatchMouseEvent", type="mousePressed", x=x, y=y, button="left", clickCount=1)
+            b.call("Input.dispatchMouseEvent", type="mouseReleased", x=x, y=y, button="left", clickCount=1)
+            l1 = b.js(label); time.sleep(2.2)
+            res.append(("a click on the map pauses it", b.js(playing) == "0" and b.js(label) == l1))
+            b.js("document.getElementById('play').focus()")
+            b.key(" ")
+            time.sleep(1.3)
+            on = b.js(playing) == "1"
+            b.key(" ")
+            l2 = b.js(label); time.sleep(1.5)
+            res.append(("keyboard: Space on the button plays, Space again pauses", on and b.js(playing) == "0" and b.js(label) == l2))
+            click_el(b, "#play"); time.sleep(0.3)
+            b.js("document.getElementById('x').focus()")
+            b.key("ArrowDown")
+            l3 = b.js(label); time.sleep(1.5)
+            res.append(("any other key pauses it", b.js(playing) == "0" and b.js(label) == l3))
+            click_el(b, "#play"); time.sleep(0.3)
+            click_el(b, "#next")
+            l4 = b.js(label); time.sleep(1.5)
+            res.append(("pressing › pauses it (and still steps once)", b.js(playing) == "0" and b.js(label) == l4))
+        with Browser(1440, 900) as b:
+            b.call("Emulation.setEmulatedMedia", features=[{"name": "prefers-reduced-motion", "value": "reduce"}])
+            b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")
+            l0 = b.js(label)
+            time.sleep(3)
+            still = b.js(label) == l0
+            click_el(b, "#play"); t0 = time.time()
+            time.sleep(max(0, t0 + 1.4 - time.time())); a = b.js(label)
+            time.sleep(max(0, t0 + 2.4 - time.time())); c = b.js(label)
+            res.append(("reduced motion: no autoplay; steps every 2 s, not 1 s", still and a == frames[0]["label_ist"] and c == frames[1]["label_ist"]))
+        for name, w, h in (("portrait", 390, 844), ("landscape", 844, 390)):
+            with Browser(w, h, mobile=True) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=rain&t=0")
+                b.js("document.getElementById('play').scrollIntoView({block: 'center'})")
+                r = b.js("(() => { const r = document.getElementById('play').getBoundingClientRect(); return [r.width, r.height, r.right <= innerWidth, document.documentElement.scrollWidth > innerWidth]; })()")
+                click_el(b, "#play"); time.sleep(2.3)
+                moved = b.js(label) == frames[2]["label_ist"]
+                b.screenshot(s.OUT / f"play_{name}.png")
+                res.append((f"{name}: button {r[0]:.0f}x{r[1]:.0f} px on screen, no sideways scroll, plays", r[2] and not r[3] and moved and r[1] >= 34))
+        for name, good in res:
+            print(f"{'PASS' if good else 'FAIL'}  {name}")
+            ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play}[sys.argv[1]]() else 1)
