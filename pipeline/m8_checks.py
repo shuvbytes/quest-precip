@@ -531,5 +531,71 @@ def play():
     return ok
 
 
+def skies():
+    """Feature 2: open umbrellas == the chip's whole % == the panel's ENS value; edge cases; phone sheet fits."""
+    import json
+    sys.path.insert(0, str(s.ROOT / "api"))
+    import pointcore as pc
+    m = json.loads((s.SITE / "data" / "manifest.json").read_text())
+    a = pc.decode(m, (s.SITE / "data" / "points.bin").read_bytes())
+    g = m["grid"]
+    x, t = "10", 0
+    kx = pc.threshold_keys(m).index(x)
+    k = pc.window_index(m["products"]["hres_24h"]["frames"], t)
+    floor = m["products"]["ens_prob"]["frames_by_threshold"][x][k]["lowest_drawn"]
+    want = {0: None, 1: None, 2: None, 37: None, 50: None, 99: None, 100: None}
+    vals = a["ens_prob"][kx, k]
+    for target in want:
+        rr, cc = (vals == target).nonzero()
+        if len(rr):
+            i = len(rr) // 2
+            want[target] = (g["lat_north"] - rr[i] * g["dlat"], g["lon_west"] + cc[i] * g["dlon"])
+    httpd, port = s.serve()
+    ok = True
+    try:
+        for target, ll in want.items():
+            if ll is None:
+                print(f"skip  {target} %: no grid point with exactly this value in this window")
+                continue
+            with Browser(1440, 900) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x={x}&t={t}&p={ll[0]:.2f},{ll[1]:.2f}")
+                b.wait("!document.getElementById('pcard').hidden", 20)
+                r = b.js("""(() => { const f = document.querySelector('#pcard .skies'), svg = f.querySelector('svg');
+                  return {open: [...svg.querySelectorAll('use')].filter(u => u.getAttribute('href') === '#u-open').length,
+                          total: svg.querySelectorAll('use').length, dataOpen: f.dataset.open, cap: f.querySelector('figcaption').textContent,
+                          geo: (() => { const us = [...svg.querySelectorAll('use')], bb = us.map(u => u.getBBox());
+                            return {maxW: Math.max(...bb.map(q => q.width)), maxH: Math.max(...bb.map(q => q.height)),
+                                    spots: new Set(bb.map(q => `${Math.round(q.x)},${Math.round(q.y)}`)).size}; })(),
+                          alt: svg.getAttribute('aria-label'), chip: document.querySelector('[data-field=card-chip]').textContent.replace(/\\u00a0/g, ' '),
+                          panel: document.querySelector('[data-field=sum-ens]').textContent}; })()""")
+                shown = r["panel"].split(": ")[-1]                      # e.g. "67 %" or "< 2 %"
+                exp_open = 0 if target < floor else target
+                exp_say = f"fewer than {pc.js_num(floor)} in 100" if target < floor else f"{target} in 100"
+                geo_ok = r["geo"]["maxW"] <= 12.5 and r["geo"]["maxH"] <= 12.5 and r["geo"]["spots"] == 100   # drawn as a 10x10 grid
+                good = (geo_ok and r["open"] == exp_open and r["total"] == 100 and r["chip"].endswith(shown)
+                        and shown == (f"< {pc.js_num(floor)} %" if target < floor else f"{target} %")
+                        and r["cap"].startswith(exp_say) and (str(exp_open) in r["alt"] or target < floor) and "member" not in (r["cap"] + r["alt"]).lower())
+                print(f"{'PASS' if good else 'FAIL'}  {target:3d} % at {ll[0]:.2f},{ll[1]:.2f}: panel '{shown}', chip '{r['chip'].split(': ')[-1]}', "
+                      f"{r['open']} of {r['total']} open, icons <= {r['geo']['maxW']:.1f} units on {r['geo']['spots']} grid spots; caption '{r['cap']}'")
+                if target == 37:
+                    print(f"      alt: {r['alt']}")
+                    b.screenshot(s.OUT / "skies_desktop.png")
+                ok &= good
+        mid = want.get(37) or want.get(50)
+        for name, w, h in (("portrait", 390, 844), ("landscape", 844, 390)):
+            with Browser(w, h, mobile=True) as b:
+                b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x={x}&t={t}&p={mid[0]:.2f},{mid[1]:.2f}")
+                b.wait("!document.getElementById('pcard').hidden", 20)
+                r = b.js("(() => { const c = document.getElementById('pcard').getBoundingClientRect(); return [Math.round(c.top), Math.round(c.bottom), innerHeight, document.documentElement.scrollWidth > innerWidth]; })()")
+                b.screenshot(s.OUT / f"skies_{name}.png")
+                good = r[0] >= 0 and r[1] <= r[2] + 1 and not r[3]
+                print(f"{'PASS' if good else 'FAIL'}  {name}: card spans y {r[0]}–{r[1]} of {r[2]} px, no sideways scroll")
+                ok &= good
+    finally:
+        httpd.shutdown()
+    print("ALL PASS" if ok else "SOME FAILED")
+    return ok
+
+
 if __name__ == "__main__":
-    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play}[sys.argv[1]]() else 1)
+    sys.exit(0 if {"search": search, "keys": keys, "layout": layout, "card": card, "brand": brand, "play": play, "skies": skies}[sys.argv[1]]() else 1)

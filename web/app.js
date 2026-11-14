@@ -1056,6 +1056,35 @@ function guideSVG(pose) {
     <title>${POSE[pose].alt}</title>${parts[pose]}</svg>`;
 }
 
+/* "100 skies" (feature 2, user 14 Nov): the ensemble chance for X as 100 small umbrellas, open = at least X mm.
+   The open count is exactly the whole % in the chip (stored chances are whole percents); "< 2 %" shows 0 open and says
+   "fewer than 2 in 100". Worded "in 100", never "members": the data file does not state the ensemble size. */
+function skiesFigure(pct, floor, x, windowNote) {
+  const below = pct < floor, n = below ? 0 : Math.round(pct);
+  const fig = el("figure", "skies");
+  const W = 13, open = "#1f5fa8", shut = "#b3b8c0";
+  let cells = "";
+  for (let i = 0; i < 100; i++) {
+    const cx = (i % 10) * W + 6.5, cy = Math.floor(i / 10) * W + 6.5;
+    cells += `<use href="#${i < n ? "u-open" : "u-shut"}" x="${cx - 6}" y="${cy - 6}" width="12" height="12"/>`;   // size needed, else each fills the whole picture
+  }
+  const say = below ? `fewer than ${fmt(floor)} in 100` : `${n} in 100`;
+  const alt = below
+    ? `Picture of 100 possible skies ${windowNote}: fewer than ${fmt(floor)} get at least ${fmt(x)} mm, so all umbrellas are shown closed.`
+    : `Picture of 100 possible skies ${windowNote}: ${n} open umbrellas get at least ${fmt(x)} mm, ${100 - n} closed ones get less.`;
+  fig.innerHTML = `<svg viewBox="0 0 130 130" width="130" height="130" role="img" aria-label="${alt}"><title>${alt}</title>
+    <defs>
+      <symbol id="u-open" viewBox="0 0 12 12"><path d="M0.4 6.6 Q6 -0.6 11.6 6.6 Q10.2 5.6 8.8 6.6 Q7.4 5.6 6 6.6 Q4.6 5.6 3.2 6.6 Q1.8 5.6 0.4 6.6 Z" fill="${open}"/>
+        <path d="M6 6.4 V10.2 q0 1.4 -1.5 1.2" stroke="${open}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
+      <symbol id="u-shut" viewBox="0 0 12 12"><path d="M6 0.8 Q8.2 5 7.4 8.4 H4.6 Q3.8 5 6 0.8 Z" fill="${shut}"/>
+        <path d="M6 8.2 V10.2 q0 1.4 -1.5 1.2" stroke="${shut}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
+    </defs>${cells}</svg>`;
+  const cap = el("figcaption", null, `${say} get ≥ ${fmt(x)} mm ${windowNote}`);
+  fig.appendChild(cap);
+  fig.dataset.open = String(n);
+  return fig;
+}
+
 function guideOn() { try { return localStorage.getItem("guide") !== "off"; } catch (e) { return true; } }
 
 function renderCard(app) {
@@ -1091,6 +1120,8 @@ function renderCard(app) {
   const bg = pct < ef.lowest_drawn ? null : binColour(Pr.ens_prob, pct);
   if (bg) { chip.style.background = bg; chip.style.color = textOn(bg); }
   text.appendChild(chip);
+  text.appendChild(skiesFigure(pct, ef.lowest_drawn, state.x,
+    state.mode === "3h" ? "in the 24-hour window" : "in this 24-hour window"));
   if (flag) text.appendChild(el("p", "pc-badge " + flag.kind,
     flag.kind === "wetter" ? "▨ Detailed run much wetter than the ensemble" : "• Detailed run much drier than the ensemble"));
   body.appendChild(text);

@@ -652,6 +652,15 @@ visible; header scrolled away; region does not fit). Build after A and B:
   other key, › all pause; Space plays/pauses; reduced motion: no autoplay, 2 s steps; phone portrait 44 px / landscape
   34 px button, no sideways scroll. Also fixed: the guide toggle jumped to the top of the panel on short screens.
 
+## Feature 2 — "100 skies" (14 Nov) — `web/app.js` skiesFigure, `m8_checks.py skies`
+- In the point card under the chance chip: 10×10 umbrellas (original SVG symbols), open (blue) = at least X mm, closed
+  (grey) = less; open count = the chip's whole % (stored chances are whole percents, so no extra rounding); "< 2 %" → 0 open,
+  "fewer than 2 in 100". Caption "37 in 100 get ≥ 10 mm in this 24-hour window"; alt text gives both counts; never "members".
+- Check: exact values 0, 1 (both "< 2 %"), 2, 37, 50, 99, 100 % found in the run and opened: open count = chip = panel,
+  caption and alt right, icons ≤ 12.5 units on 100 distinct grid spots (first version drew every umbrella full-size on top
+  of each other: <use> without width/height; the count-only check had passed), card fits phone portrait/landscape (compact
+  card on short screens).
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
