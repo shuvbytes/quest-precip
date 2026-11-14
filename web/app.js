@@ -53,10 +53,11 @@ function makeMap(m) {
   });
   // Draw order (bottom -> top): land fill, rain/chance image, disagreement hatch, coast + India boundary lines.
   // "outside" = shading beyond the forecast area (no data there); it never overlaps the data image.
-  [["land", 200], ["fill", 300], ["outside", 320], ["hatch", 350], ["lines", 450], ["edge-labels", 460]].forEach(([name, z]) => {
+  // "places" = city/country/sea labels (M8), above the data and lines, never clickable (clicks reach the map).
+  [["land", 200], ["fill", 300], ["outside", 320], ["hatch", 350], ["lines", 450], ["places", 455], ["edge-labels", 460]].forEach(([name, z]) => {
     map.createPane(name).style.zIndex = z;
   });
-  ["lines", "outside", "edge-labels"].forEach((p) => { map.getPane(p).style.pointerEvents = "none"; });
+  ["lines", "outside", "places", "edge-labels"].forEach((p) => { map.getPane(p).style.pointerEvents = "none"; });
   map.getContainer().style.background = m.basemap.sea;
   const b = m.image.bounds;
   map.setMaxBounds(L.latLngBounds(b).pad(0.15));
@@ -65,16 +66,79 @@ function makeMap(m) {
 }
 
 async function addBasemap(map, m) {
-  const [land, coast, india] = await Promise.all([
-    getJSON("geo/land.geojson"), getJSON("geo/coastline.geojson"), getJSON("geo/india-boundary.geojson")]);
+  const [land, coast, india, states, places] = await Promise.all([
+    getJSON("geo/land.geojson"), getJSON("geo/coastline.geojson"), getJSON("geo/india-boundary.geojson"),
+    getJSON("geo/states.geojson"), getJSON("geo/places.json")]);
   // Land as a fill only; the coastline comes from a separate line layer, so no clip edges are ever drawn.
   L.geoJSON(land, { pane: "land", interactive: false,
     style: { stroke: false, fillColor: m.basemap.land, fillOpacity: 1 } }).addTo(map);
   L.geoJSON(coast, { pane: "lines", interactive: false,
     style: { color: "#6b717b", weight: 1.1, fill: false } }).addTo(map);
+  // internal state/UT boundaries (DataMeet, edges shared by two states only), thin grey, under the India outline
+  L.geoJSON(states, { pane: "lines", interactive: false,
+    style: { color: "#7d838c", weight: 0.9, fill: false } }).addTo(map);
   L.geoJSON(india, { pane: "lines", interactive: false,
     style: { color: "#2b2f36", weight: 1.4, fill: false } }).addTo(map);
   addForecastEdge(map, m);
+  const list = places.places.map((p) => Object.fromEntries(places.fields.map((f, i) => [f, p[i]])));
+  addPlaceLabels(map, list, m.image.bounds);
+  return list;
+}
+
+/* ---------- place labels (M8 A): Natural Earth cities + hand-placed country and sea names ----------
+   Density: a city is a candidate when zoom >= its Natural Earth MIN_ZOOM - CITY_ZOOM_OFFSET (capitals always);
+   overlapping labels are then dropped greedily by priority (national capital, state capital, population), so the
+   fitted view shows the main cities and zooming in adds towns. White halo (CSS) keeps text readable over rain. */
+const CITY_ZOOM_OFFSET = 0.5;
+const LABEL_FONT = { city: "12px system-ui, sans-serif", capital: "600 12px system-ui, sans-serif",
+  country: "600 11px system-ui, sans-serif", sea: "italic 12px system-ui, sans-serif" };
+let measureCtx = null;
+function textWidth(text, font) {
+  measureCtx = measureCtx || document.createElement("canvas").getContext("2d");
+  measureCtx.font = font;
+  return measureCtx.measureText(text).width;
+}
+
+function addPlaceLabels(map, places, bounds) {
+  // city names only inside the forecast area (outside it there is no data to place); countries and seas everywhere
+  const [[s, w], [n, e]] = bounds;
+  const inArea = (p) => p.lat >= s && p.lat <= n && p.lon >= w && p.lon <= e;
+  const items = places.map((p) => {
+    const cls = p.kind === "country" ? "country" : p.kind === "sea" ? "sea" : p.kind === "city" ? "city" : "capital";
+    const text = p.kind === "country" ? p.name.toUpperCase() : p.name;
+    const w = textWidth(text, LABEL_FONT[cls]) + (cls === "country" ? text.length * 1.2 : 0);
+    if ((cls === "city" || cls === "capital") && !inArea(p)) return null;
+    const dot = cls === "city" || cls === "capital";
+    const html = (dot ? `<span class="pl-dot"></span>` : "") + `<span class="pl-txt">${text}</span>`;
+    const marker = L.marker([p.lat, p.lon], { pane: "places", interactive: false, keyboard: false,
+      icon: L.divIcon({ className: `pl pl-${cls}`, html, iconSize: null }) });
+    return { p, cls, w: w + (dot ? 11 : 0), h: 15, dot, marker, on: false };
+  }).filter(Boolean);
+  items.sort((a, b) => a.p.priority - b.p.priority || b.p.population - a.p.population);
+  const update = () => {
+    const z = map.getZoom(), size = map.getSize(), taken = [], shown = { city: 0, capital: 0, country: 0, sea: 0 };
+    for (const it of items) {
+      const p = it.p;
+      let want = it.cls === "sea" || it.cls === "country" ? z <= 7.5
+        : it.cls === "capital" ? true : z >= p.min_zoom - CITY_ZOOM_OFFSET;
+      let box = null;
+      if (want) {
+        const pt = map.latLngToContainerPoint([p.lat, p.lon]);
+        // dot at the place, text to its right; country/sea text centred on the point
+        box = it.dot ? [pt.x - 4, pt.y - it.h / 2, pt.x - 4 + it.w, pt.y + it.h / 2]
+          : [pt.x - it.w / 2, pt.y - it.h / 2, pt.x + it.w / 2, pt.y + it.h / 2];
+        const onScreen = box[0] >= 2 && box[2] <= size.x - 2 && box[1] >= 0 && box[3] <= size.y;   // whole label, never cut
+        want = onScreen && !taken.some((t) => box[0] < t[2] + 3 && t[0] < box[2] + 3 && box[1] < t[3] && t[1] < box[3]);
+      }
+      if (want) { taken.push(box); shown[it.cls]++; }
+      if (want && !it.on) it.marker.addTo(map);
+      if (!want && it.on) it.marker.remove();
+      it.on = want;
+    }
+    map.getContainer().dataset.labels = JSON.stringify(shown);     // for checks: labels shown per kind
+  };
+  map.on("zoomend moveend resize", update);
+  update();
 }
 
 /* The forecast area: outside it "no colour" means "no data", not "no rain". Shown three ways (user, 13 Nov):
@@ -287,7 +351,8 @@ function renderFooter(m) {
   p2.style.margin = "2px 0 0";
   p2.innerHTML = `India boundary: <a href="https://github.com/datameet/maps/blob/master/Country/india-composite.geojson" rel="noopener">India boundaries</a>
     by <a href="http://datameet.org/" rel="noopener">DataMeet India community</a> (CC-0 per the dataset's README), drawn as per the Survey of India official boundary.
-    Land and coastline: Natural Earth (public domain). No third-party map tiles.`;
+    State boundaries: <a href="https://github.com/datameet/maps/tree/master/States" rel="noopener">State boundaries</a> by DataMeet India community (CC BY 4.0; internal lines only).
+    Land, coastline and place names: Natural Earth (public domain). No third-party map tiles.`;
   foot.append(p1, p2);
 }
 
@@ -994,12 +1059,12 @@ async function main() {
   const map = makeMap(m);
   // No animation: the zoom must be final before the first render picks fine/bold marks and the zoom note.
   if (view) map.setView(view.center, view.zoom, { animate: false });
-  await addBasemap(map, m);
+  const places = await addBasemap(map, m);
   const opts = { pane: "fill", className: "px", interactive: false };
   const fill = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds, opts).addTo(map);
   const hatch = L.imageOverlay(DATA + m.products.hres_24h.frames[0].file, m.image.bounds,
     { pane: "hatch", className: "px", interactive: false });
-  const app = { m, map, fill, hatch };
+  const app = { m, map, fill, hatch, places };
   window.__rainOutlook = { map };                 // for dev checks (crosshair test); not used by the page
   // Leaflet measures its box once and only re-measures on window resize. The box also changes when the header and
   // footer text arrive, when fonts load, or when panels change height; a stale size put Leaflet's centre 33-49 px
