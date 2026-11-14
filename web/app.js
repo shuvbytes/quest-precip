@@ -1060,28 +1060,29 @@ function guideSVG(pose) {
    The open count is exactly the whole % in the chip (stored chances are whole percents); "< 2 %" shows 0 open and says
    "fewer than 2 in 100". Worded "in 100", never "members": the data file does not state the ensemble size. */
 function skiesFigure(pct, floor, x, windowNote) {
+  // Solid squares (user, 14 Nov: 6 px umbrella icons were unreadable): blue = at least X mm, pale sand = less
+  // (4.1:1 between them, also for colour-blind viewers); a key with two readable umbrellas keeps the "100 skies" idea.
   const below = pct < floor, n = below ? 0 : Math.round(pct);
+  const open = "#1f5fa8", shut = "#e6cb94", edge = "#b07a1e";
   const fig = el("figure", "skies");
-  // closed = ochre (user, 14 Nov: grey was invisible at 60 px): 3.7:1 on white, dE >= 25 from the blue also for deutan/protan
-  const W = 13, open = "#1f5fa8", shut = "#b07a1e";
+  const umb = (isOpen) => isOpen
+    ? `<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M0.4 6.6 Q6 -0.6 11.6 6.6 Z" fill="${open}"/><path d="M6 6.4 V10.2 q0 1.4 -1.5 1.2" stroke="${open}" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>`
+    : `<svg viewBox="0 0 12 12" width="14" height="14" aria-hidden="true"><path d="M6 0.6 Q9.4 5 8.2 8.6 H3.8 Q2.6 5 6 0.6 Z" fill="${shut}" stroke="${edge}" stroke-width="0.8"/><path d="M6 8.4 V10.2 q0 1.4 -1.5 1.2" stroke="${edge}" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`;
+  const key = el("p", "skies-key");
+  key.setAttribute("aria-hidden", "true");          // the figure's alt text already says it
+  key.innerHTML = `${umb(true)}<span>≥ ${fmt(x)} mm</span>${umb(false)}<span>less</span>`;
   let cells = "";
   for (let i = 0; i < 100; i++) {
-    const cx = (i % 10) * W + 6.5, cy = Math.floor(i / 10) * W + 6.5;
-    cells += `<use href="#${i < n ? "u-open" : "u-shut"}" x="${cx - 6}" y="${cy - 6}" width="12" height="12"/>`;   // size needed, else each fills the whole picture
+    cells += `<rect x="${(i % 10) * 7}" y="${Math.floor(i / 10) * 7}" width="6" height="6" rx="1" fill="${i < n ? open : shut}" data-c="${i < n ? 1 : 0}"/>`;
   }
   const say = below ? `fewer than ${fmt(floor)} in 100` : `${n} in 100`;
   const alt = below
-    ? `Picture of 100 possible skies ${windowNote}: fewer than ${fmt(floor)} get at least ${fmt(x)} mm, so all umbrellas are shown closed.`
-    : `Picture of 100 possible skies ${windowNote}: ${n} open umbrellas get at least ${fmt(x)} mm, ${100 - n} closed ones get less.`;
-  fig.innerHTML = `<svg viewBox="0 0 130 130" width="130" height="130" role="img" aria-label="${alt}"><title>${alt}</title>
-    <defs>
-      <symbol id="u-open" viewBox="0 0 12 12"><path d="M0.4 6.6 Q6 -0.6 11.6 6.6 Q10.2 5.6 8.8 6.6 Q7.4 5.6 6 6.6 Q4.6 5.6 3.2 6.6 Q1.8 5.6 0.4 6.6 Z" fill="${open}"/>
-        <path d="M6 6.4 V10.2 q0 1.4 -1.5 1.2" stroke="${open}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
-      <symbol id="u-shut" viewBox="0 0 12 12"><path d="M6 0.6 Q9.4 5 8.2 8.6 H3.8 Q2.6 5 6 0.6 Z" fill="${shut}"/>
-        <path d="M6 8.2 V10.2 q0 1.4 -1.5 1.2" stroke="${shut}" stroke-width="1.3" fill="none" stroke-linecap="round"/></symbol>
-    </defs>${cells}</svg>`;
-  const cap = el("figcaption", null, `${say} get ≥ ${fmt(x)} mm ${windowNote}`);
-  fig.appendChild(cap);
+    ? `Picture of 100 possible skies ${windowNote}: fewer than ${fmt(floor)} get at least ${fmt(x)} mm, so all 100 squares are pale.`
+    : `Picture of 100 possible skies ${windowNote}: ${n} blue squares get at least ${fmt(x)} mm, ${100 - n} pale squares get less.`;
+  const row = el("div", "skies-row");
+  row.innerHTML = `<svg class="skies-grid" viewBox="0 0 69 69" width="69" height="69" role="img" aria-label="${alt}"><title>${alt}</title>${cells}</svg>`;
+  row.appendChild(el("p", "skies-cap", `${say} get ≥ ${fmt(x)} mm ${windowNote}`));
+  fig.append(key, row);
   fig.dataset.open = String(n);
   return fig;
 }

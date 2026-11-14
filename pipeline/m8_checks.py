@@ -349,7 +349,7 @@ def card():
                       return {pose: c.dataset.pose, near: f('card-near') === f('near'), main: f('card-main') === f('sum-24h'),
                         chip: (f('card-chip') || '').replace(/\u00a0/g, ' ').endsWith((f('sum-ens') || '').split(': ').pop()), badge: !!c.querySelector('.pc-badge'),
                         panelDisagree: !!document.querySelector('[data-field=disagree]'),
-                        alt: (c.querySelector('svg') || {}).getAttribute && c.querySelector('svg').getAttribute('aria-label'),
+                        alt: c.querySelector('.pc-guide svg') ? c.querySelector('.pc-guide svg').getAttribute('aria-label') : 'guide hidden',   // the guide's alt text (not the decorative key icons)
                         onScreen: cr.left >= mr.left && cr.right <= mr.right + 1 && cr.top >= mr.top && cr.bottom <= mr.bottom + 1,
                         coversPoint: px >= cr.left && px <= cr.right && py >= cr.top && py <= cr.bottom,
                         main_text: f('card-main'), chip_text: f('card-chip')}; })()""")
@@ -560,23 +560,22 @@ def skies():
             with Browser(1440, 900) as b:
                 b.open(f"http://127.0.0.1:{port}/index.html?api=off#mode=24h&fill=chance&x={x}&t={t}&p={ll[0]:.2f},{ll[1]:.2f}")
                 b.wait("!document.getElementById('pcard').hidden", 20)
-                r = b.js("""(() => { const f = document.querySelector('#pcard .skies'), svg = f.querySelector('svg');
-                  return {open: [...svg.querySelectorAll('use')].filter(u => u.getAttribute('href') === '#u-open').length,
-                          total: svg.querySelectorAll('use').length, dataOpen: f.dataset.open, cap: f.querySelector('figcaption').textContent,
-                          geo: (() => { const us = [...svg.querySelectorAll('use')], bb = us.map(u => u.getBBox());
-                            return {maxW: Math.max(...bb.map(q => q.width)), maxH: Math.max(...bb.map(q => q.height)),
-                                    spots: new Set(bb.map(q => `${Math.round(q.x)},${Math.round(q.y)}`)).size}; })(),
-                          alt: svg.getAttribute('aria-label'), chip: document.querySelector('[data-field=card-chip]').textContent.replace(/\\u00a0/g, ' '),
+                r = b.js("""(() => { const f = document.querySelector('#pcard .skies'), svg = f.querySelector('.skies-grid');
+                  const rs = [...svg.querySelectorAll('rect')], bb = svg.getBoundingClientRect(), cell = rs[0].getBoundingClientRect();
+                  return {open: rs.filter(q => q.dataset.c === '1').length, total: rs.length, dataOpen: f.dataset.open,
+                          cap: f.querySelector('.skies-cap').textContent, key: f.querySelector('.skies-key').textContent.replace(/\u00a0/g, ' '),
+                          geo: {cellPx: +cell.width.toFixed(1), gridPx: Math.round(bb.width), spots: new Set(rs.map(q => q.getAttribute('x') + ',' + q.getAttribute('y'))).size},
+                          alt: svg.getAttribute('aria-label'), chip: document.querySelector('[data-field=card-chip]').textContent.replace(/\u00a0/g, ' '),
                           panel: document.querySelector('[data-field=sum-ens]').textContent}; })()""")
                 shown = r["panel"].split(": ")[-1]                      # e.g. "67 %" or "< 2 %"
                 exp_open = 0 if target < floor else target
                 exp_say = f"fewer than {pc.js_num(floor)} in 100" if target < floor else f"{target} in 100"
-                geo_ok = r["geo"]["maxW"] <= 12.5 and r["geo"]["maxH"] <= 12.5 and r["geo"]["spots"] == 100   # drawn as a 10x10 grid
+                geo_ok = r["geo"]["spots"] == 100 and r["geo"]["cellPx"] >= 5 and r["key"].startswith(f"≥ {x} mm")   # 10x10, cells >= 5 px
                 good = (geo_ok and r["open"] == exp_open and r["total"] == 100 and r["chip"].endswith(shown)
                         and shown == (f"< {pc.js_num(floor)} %" if target < floor else f"{target} %")
                         and r["cap"].startswith(exp_say) and (str(exp_open) in r["alt"] or target < floor) and "member" not in (r["cap"] + r["alt"]).lower())
                 print(f"{'PASS' if good else 'FAIL'}  {target:3d} % at {ll[0]:.2f},{ll[1]:.2f}: panel '{shown}', chip '{r['chip'].split(': ')[-1]}', "
-                      f"{r['open']} of {r['total']} open, icons <= {r['geo']['maxW']:.1f} units on {r['geo']['spots']} grid spots; caption '{r['cap']}'")
+                      f"{r['open']} of {r['total']} blue, cells {r['geo']['cellPx']} px in a {r['geo']['gridPx']} px grid; caption '{r['cap']}'")
                 if target == 37:
                     print(f"      alt: {r['alt']}")
                     b.screenshot(s.OUT / "skies_desktop.png")

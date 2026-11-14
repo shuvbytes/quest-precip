@@ -663,6 +663,13 @@ visible; header scrolled away; region does not fit). Build after A and B:
   of each other: <use> without width/height; the count-only check had passed), card fits phone portrait/landscape (compact
   card on short screens).
 
+- **Redesign (user, 14 Nov): 6 px umbrella icons were unreadable** (open/closed indistinguishable at card size). Now a 10×10
+  block of solid 6 px squares (69 px): blue #1f5fa8 = at least X mm, pale sand #e6cb94 = less (4.1:1 between them, dE 42,
+  block still visible on white); above it a key with two readable 14 px umbrellas ("☂ ≥ 10 mm · closed = less").
+  Earlier tries: grey closed umbrellas (2:1 on white, invisible), ochre umbrellas (visible but still unreadable shapes).
+  Checks updated (squares counted by data-c; geometry: 100 distinct cells ≥ 5 px; key text); card check's guide-alt test now
+  targets the guide SVG (the first SVG in the card is now a decorative key icon).
+
 ## README notes (for M8 C)
 - **Next step (not built): vector hatching.** The disagreement hatch is a raster PNG stretched with `pixelated`, so stripes
   look staircased at the highest zooms. Drawing it as an SVG pattern from the manifest's flagged-cell lists (clusters ≥ 3)
