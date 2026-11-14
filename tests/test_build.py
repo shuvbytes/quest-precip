@@ -47,6 +47,25 @@ def test_floors_and_files(built):
     assert "CC BY 4.0" in m["attribution"] and "ECMWF" in m["attribution"]
 
 
+def test_png_never_colours_below_lowest_drawn(built):
+    """The drawn map obeys each frame's floor: no pixel uses a colour whose bin starts below lowest_drawn. For a raised
+    3 h frame (lowest 1 mm) colour 1 (0.5-1 mm) must not appear. Guards the step from manifest number to picture."""
+    import numpy as np
+    from PIL import Image
+    out, m = built
+    P = m["products"]
+    groups = [(P["hres_3h"]["bins"], P["hres_3h"]["frames"]), (P["hres_24h"]["bins"], P["hres_24h"]["frames"])]
+    groups += [(P["ens_prob"]["bins"], fr) for fr in P["ens_prob"]["frames_by_threshold"].values()]
+    raised = 0
+    for bins, frames in groups:
+        for f in frames:
+            codes = np.unique(np.asarray(Image.open(out / f["file"])))
+            lowest_code = bins.index(f["lowest_drawn"]) + 1          # code i <-> bin [bins[i-1], bins[i])
+            assert all(c == 0 or c >= lowest_code for c in codes), (f["file"], f["lowest_drawn"], codes)
+            raised += f["floor_raised"]
+    print(f"raised-floor frames checked in this run: {raised}")
+
+
 def test_points_roundtrip(built):
     """Decoding points.bin gives back the original values within 0.1 mm / 1 %, and the 24 h array equals the map's
     TP(t+24) - TP(t) rounded to 0.1 mm exactly (so panel, map and disagreement sentence show the same number)."""

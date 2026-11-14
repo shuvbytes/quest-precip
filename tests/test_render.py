@@ -69,3 +69,18 @@ def test_classify_bins_floor_and_over():
     np.testing.assert_array_equal(classify(v, bins, 1.0, 4), [0, 0, 0, 0, 0, 2, 3, 4, 4])
     # probabilities: 3 colours for 3 bins, exactly-top value takes the top colour
     np.testing.assert_array_equal(classify(np.array([1, 2, 99, 100]), [2, 10, 50, 100], 2, 3), [0, 1, 3, 3])
+
+
+def test_render_png_hides_values_below_a_raised_floor(tmp_path):
+    """End of the floor chain on its own: a written PNG has no colour for 0.7 mm when lowest_drawn is 1.0 (a coarse
+    frame), but does when lowest_drawn is 0.5. Never vacuous, unlike a check that needs a real run with raised floors."""
+    from PIL import Image
+    from render import Grid, render_png
+    g = Grid(10.0, 80.0, 0.25, 0.25, 3, 3)
+    field = np.full((3, 3), 0.7)
+    field[0, 0] = 3.0                                          # one clearly visible cell
+    bins, colours = [0.5, 1, 2, 5], ["#111111", "#222222", "#333333", "#444444"]
+    for lowest, want in ((1.0, {0, 3}), (0.5, {1, 3})):         # code 1 = 0.5-1 mm, code 3 = 2-5 mm
+        render_png(field, g, bins, colours, lowest, tmp_path / "f.png")
+        codes = set(np.unique(np.asarray(Image.open(tmp_path / "f.png"))).tolist())
+        assert codes == want, (lowest, codes)
